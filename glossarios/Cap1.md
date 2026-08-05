@@ -1,1 +1,105 @@
+Glossário Cap 01
 
+Ajuste fino (fine-tuning) 
+Termo original: Fine-tuning 
+Tradução/equivalente: Ajuste fino 
+Definição: Processo de continuar o treinamento de um modelo já pré-treinado, utilizando um conjunto de dados menor e mais específico, para adaptá-lo a uma tarefa ou domínio particular. 
+Função no modelo de linguagem: Permite transformar um LLM genérico (modelo-base) em um modelo especializado, reaproveitando o conhecimento linguístico já adquirido no pré-treinamento. 
+Relação com outros conceitos: É a segunda etapa do processo de criação de um LLM, complementar ao pré-treinamento; subdivide-se em ajuste fino de instruções e ajuste fino de classificação. 
+Exemplo conceitual: Partir de um GPT-3 pré-treinado e ajustá-lo com pares pergunta-resposta para que passe a seguir instruções, como no InstructGPT. 
+
+Aprendizado de máquina (machine learning) 
+Termo original: Machine Learning (ML) 
+Tradução/equivalente: Aprendizado de máquina 
+Definição: Área da inteligência artificial voltada ao desenvolvimento de algoritmos capazes de aprender padrões a partir de dados e realizar previsões ou decisões, sem serem explicitamente programados para cada regra. 
+Função no modelo de linguagem: Fornece o paradigma geral de treinamento sob o qual os LLMs se enquadram, sendo o aprendizado profundo sua especialização mais usada nesse domínio. 
+Relação com outros conceitos: Engloba o aprendizado profundo como subcategoria; contrasta com sistemas baseados em regras manuais e exige, na abordagem tradicional, extração manual de características (features). 
+Exemplo conceitual: Um filtro de spam tradicional treinado com e-mails rotulados como "spam" ou "não spam", ajustando pesos para minimizar erros de classificação.
+
+Aprendizado profundo (deep learning) 
+Termo original: Deep Learning 
+Tradução/equivalente: Aprendizado profundo 
+Definição: Subcampo do aprendizado de máquina que utiliza redes neurais com três ou mais camadas para modelar padrões complexos e abstrações nos dados, sem exigir extração manual de características. 
+Função no modelo de linguagem: É a técnica que viabiliza o treinamento dos LLMs em larga escala, permitindo capturar nuances contextuais da linguagem automaticamente, a partir dos dados. 
+Relação com outros conceitos: É subconjunto do aprendizado de máquina (machine learning), que por sua vez é subárea da inteligência artificial (IA); diferencia-se do ML tradicional por dispensar a engenharia manual de features. 
+Exemplo conceitual: Em vez de um especialista definir manualmente que a palavra "grátis" indica spam, uma rede profunda aprende sozinha, a partir de milhares de exemplos rotulados, quais padrões de texto indicam spam. 
+
+Aprendizado zero-shot e few-shot 
+Termo original: Zero-shot / Few-shot learning 
+Tradução/equivalente: Aprendizado sem exemplos / com poucos exemplos 
+Definição: Zero-shot é a capacidade de um modelo realizar uma tarefa nova sem nenhum exemplo prévio específico; few-shot é a capacidade de aprender a partir de um número mínimo de exemplos fornecidos no momento do uso. 
+Função no modelo de linguagem: Demonstra a versatilidade dos LLMs, permitindo que executem tarefas diversas (tradução, classificação etc.) sem necessidade de re-treinamento ou ajuste fino específico para cada uma. 
+Relação com outros conceitos: Está associado ao comportamento emergente dos LLMs e é uma consequência do pré-treinamento em grande escala. 
+Exemplo conceitual: Pedir a um LLM para "traduzir esta frase para o francês" sem nenhum exemplo prévio (zero-shot), ou fornecer 2-3 exemplos de tradução antes de pedir uma nova (few-shot). 
+
+Arquitetura Transformer 
+Termo original: Transformer architecture 
+Tradução/equivalente: Arquitetura Transformer (termo mantido em inglês por convenção técnica) 
+Definição: Arquitetura de rede neural profunda introduzida em 2017 no artigo "Attention Is All You Need", baseada em mecanismos de atenção, originalmente composta por um codificador (encoder) e um decodificador (decoder). 
+Função no modelo de linguagem: É a arquitetura-base da maioria dos LLMs modernos (incluindo GPT e BERT), responsável por processar sequências de texto e capturar relações contextuais entre palavras. 
+Relação com outros conceitos: Deu origem a variantes especializadas, BERT (baseado apenas no encoder) e GPT (baseado apenas no decoder), e depende do mecanismo de autoatenção (self-attention) como componente central. 
+Exemplo conceitual: Ao traduzir "the cat sat" para o português, o Transformer usa self-attention para ponderar a relação entre "cat" e "sat" ao gerar cada palavra da tradução. 
+
+BERT 
+Termo original: BERT (Bidirectional Encoder Representations from Transformers) 
+Tradução/equivalente: Representações de Codificador Bidirecional a partir de Transformers (geralmente mantido como sigla, BERT) 
+Definição: Modelo baseado no submódulo codificador (encoder) do Transformer, treinado para prever palavras mascaradas em uma frase, processando o contexto nos dois sentidos (bidirecional). 
+Função no modelo de linguagem: Especializa-se em tarefas de compreensão e classificação de texto (análise de sentimento, detecção de conteúdo tóxico), ao contrário dos modelos GPT, voltados à geração de texto. 
+Relação com outros conceitos: É uma variante da arquitetura Transformer, assim como o GPT; opõe-se a ele em abordagem (encoder vs. decoder) e em objetivo (compreensão vs. geração). 
+Exemplo conceitual: Na frase "O gato [MÁSCARA] no sofá", o BERT usa o contexto anterior e posterior para prever que a palavra oculta é "dormiu". 
+
+Comportamento emergente 
+Termo original: Emergent behavior 
+Tradução/equivalente: Comportamento emergente 
+Definição: Capacidade de um modelo realizar tarefas para as quais não foi explicitamente treinado, surgindo como consequência da escala e da diversidade dos dados de treinamento. 
+Função no modelo de linguagem: Explica por que LLMs treinados apenas para prever a próxima palavra conseguem realizar tarefas como tradução, sem terem sido treinados especificamente para isso. 
+Relação com outros conceitos: Está diretamente ligado ao aprendizado zero-shot/few-shot e à escala do modelo (número de parâmetros e volume de dados de treinamento). 
+Exemplo conceitual: Um modelo treinado majoritariamente em texto em inglês, mas exposto a algum conteúdo multilíngue, aprende padrões de tradução sem ter sido treinado especificamente para essa tarefa. 
+
+Conjunto de dados CommonCrawl 
+Termo original: CommonCrawl dataset 
+Tradução/equivalente: Conjunto de dados CommonCrawl 
+Definição: Grande base de dados pública composta por texto coletado da internet por meio de rastreamento (crawling) de páginas web. 
+Função no modelo de linguagem: Serviu como uma das principais fontes de dados para o pré-treinamento do GPT-3, fornecendo grande volume e diversidade textual. 
+Relação com outros conceitos: É um dos subconjuntos de dados listados na Tabela 1.1 do GPT-3, ao lado de fontes como StackExchange e arXiv. 
+Exemplo conceitual: Consiste, por si só, em cerca de 410 bilhões de tokens, exigindo aproximadamente 570 GB de armazenamento. 
+
+Modelos Llama (Meta) 
+Termo original: LLaMA (Meta) 
+Tradução/equivalente: Modelos Llama da Meta 
+Definição: Família de LLMs de código aberto desenvolvida pela Meta, baseada nos mesmos princípios do GPT, com pequenas modificações arquiteturais. 
+Função no modelo de linguagem: Representa uma geração mais recente de LLMs, expandindo as fontes de dados de treinamento (ex.: arXiv, StackExchange) além do que foi usado no GPT-3. 
+Relação com outros conceitos: Mantém a base conceitual da arquitetura Transformer/GPT (decoder-only, previsão da próxima palavra). 
+Exemplo conceitual: Enquanto o GPT-3 foi treinado majoritariamente com CommonCrawl e livros, o LLaMA incorporou também artigos científicos e discussões técnicas do StackExchange. 
+
+Processamento de Linguagem Natural (PLN) 
+Termo original: Natural Language Processing (NLP) 
+Tradução/equivalente: Processamento de Linguagem Natural (PLN) 
+Definição: Subárea da inteligência artificial dedicada a permitir que computadores compreendam, interpretem, gerem e manipulem a linguagem humana. 
+Função no modelo de linguagem: É o campo de aplicação para o qual os LLMs foram desenvolvidos; tarefas como tradução, análise de sentimento e resposta a perguntas são tarefas clássicas de PLN. 
+Relação com outros conceitos: Os LLMs representam o estado da arte atual em PLN, superando o desempenho de métodos tradicionais baseados em regras manuais ou modelos mais simples. 
+Exemplo conceitual: Um sistema de PLN recebe "Estou muito feliz hoje!" e classifica o sentimento da frase como positivo. 
+
+Programação do StackExchange (dados de treinamento) 
+Termo original: StackExchange data 
+Tradução/equivalente: Dados de programação do StackExchange 
+Definição: Conjunto de dados formado por perguntas e respostas técnicas extraídas do site StackExchange. 
+Função no modelo de linguagem: Usado como fonte adicional de treinamento em modelos posteriores ao GPT-3 (como o LLaMA), fornecendo exemplos de raciocínio técnico e código. 
+Relação com outros conceitos: Complementa fontes como CommonCrawl e arXiv na composição dos conjuntos de dados de pré-treinamento. 
+Exemplo conceitual: Corresponde a cerca de 78 GB de dados no conjunto usado para treinar o LLaMA. 
+
+Redes neurais profundas 
+Termo original: Deep Neural Networks (DNN) 
+Tradução/equivalente: Redes neurais profundas 
+Definição: Modelos computacionais compostos por múltiplas camadas de neurônios artificiais conectados entre si, inspirados no funcionamento do cérebro humano, capazes de aprender representações hierárquicas complexas a partir de dados. 
+Função no modelo de linguagem: Constituem a base estrutural dos LLMs, permitindo que o modelo transforme sequências de texto em representações numéricas que capturam padrões linguísticos. 
+Relação com outros conceitos: É a base tecnológica sobre a qual se apoia o aprendizado profundo (deep learning) e, por extensão, a arquitetura Transformer; uma rede é considerada "profunda" quando possui três ou mais camadas. 
+Exemplo conceitual: Uma rede com camada de entrada, camadas ocultas e camada de saída, em que cada camada aplica uma transformação h = f(Wx + b) sobre a saída da camada anterior. 
+
+Token 
+Termo original: Token 
+Tradução/equivalente: Token (unidade de texto; não há tradução consolidada em português) 
+Definição: Unidade básica de texto, pode ser uma palavra, parte de uma palavra ou um caractere que o modelo lê e processa. 
+Função no modelo de linguagem: É a unidade fundamental de entrada e saída dos LLMs; o número de tokens de um conjunto de dados mede aproximadamente seu tamanho e é usado para dimensionar treinamento e custos. 
+Relação com outros conceitos: Relaciona-se ao processo de tokenização (conversão de texto em tokens) e ao conceito de número de parâmetros, já que ambos definem a escala de um LLM. 
+Exemplo conceitual: A frase "os LLMs aprendem" pode ser dividida em tokens como ["os", "LL", "Ms", "aprend", "em"], dependendo do tokenizador usado. 
