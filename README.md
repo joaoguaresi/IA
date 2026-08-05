@@ -13,6 +13,6 @@ Implementações e glossários: 25%
 Modelo LLM integrado: 25%
 Experimentação e análise: 15%
 Documentação técnica: 10%
-Apresentação/arguição individual: 10%
+Apresentação individual: 10%
 
 Ao final sera entregue um repositório com a evolução do nosso projeto, o glossário do livro e um relatório técnico com os resultados que obtivemos.
