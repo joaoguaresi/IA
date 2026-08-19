@@ -1,0 +1,15 @@
+# Ambiente virtual Python
+.venv/
+
+# Cache Python
+__pycache__/
+*.pyc
+
+# Checkpoints e notebooks
+.ipynb_checkpoints/
+
+# Ambiente/IDE
+.vscode/
+
+# Instruções locais do Claude Code (não deve ser commitado)
+CLAUDE.md
