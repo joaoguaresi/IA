@@ -4,6 +4,7 @@
 # Cache Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Checkpoints e notebooks
 .ipynb_checkpoints/
