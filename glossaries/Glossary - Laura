@@ -1,4 +1,4 @@
-Glossário
+Glossário — Capítulo 1: Understanding Large Language Models
 
 Ajuste fino (fine-tuning)
 Termo original: Fine-tuning
@@ -103,3 +103,93 @@ Definição: Unidade básica de texto, pode ser uma palavra, parte de uma palavr
 Função no modelo de linguagem: É a unidade fundamental de entrada e saída dos LLMs; o número de tokens de um conjunto de dados mede aproximadamente seu tamanho e é usado para dimensionar treinamento e custos.
 Relação com outros conceitos: Relaciona-se ao processo de tokenização (conversão de texto em tokens) e ao conceito de número de parâmetros, já que ambos definem a escala de um LLM.
 Exemplo conceitual: A frase "os LLMs aprendem" pode ser dividida em tokens como ["os", "LL", "Ms", "aprend", "em"], dependendo do tokenizador usado.
+
+Glossário — Capítulo 2: Working with Text Data
+
+Batches
+Termo original: Batches
+Tradução/equivalente: Lotes (batches)
+Definição: Agrupamentos de múltiplos exemplos de treinamento (pares entrada-alvo) processados juntos em uma única passagem pela rede neural.
+Função no modelo de linguagem: Tornam o treinamento computacionalmente mais eficiente, permitindo processar vários exemplos em paralelo e estabilizar a atualização dos pesos do modelo.
+Relação com outros conceitos: Relaciona-se ao parâmetro stride e à amostragem com janela deslizante, que geram os exemplos agrupados em cada batch.
+Exemplo conceitual: Um batch de tamanho 8 contém 8 pares (entrada, alvo) processados simultaneamente em uma etapa de treinamento.
+
+Biblioteca tiktoken
+Termo original: tiktoken library
+Tradução/equivalente: Biblioteca tiktoken
+Definição: Biblioteca de código aberto, usada em Python, que implementa o algoritmo de byte pair encoding (BPE) de forma eficiente.
+Função no modelo de linguagem: É a ferramenta prática utilizada para tokenizar texto no padrão usado pelos modelos GPT, permitindo aplicar o BPE sem implementá-lo do zero.
+Relação com outros conceitos: É a implementação de referência do byte pair encoding, usada para construir o vocabulário de 50.257 tokens dos modelos GPT.
+Exemplo conceitual: import tiktoken; enc = tiktoken.get_encoding("gpt2"); enc.encode("Olá, mundo!").
+
+Byte pair encoding (BPE)
+Termo original: Byte Pair Encoding (BPE)
+Tradução/equivalente: Codificação por par de bytes (geralmente mantido como sigla BPE)
+Definição: Algoritmo de tokenização por subpalavra que constrói um vocabulário mesclando iterativamente os pares de caracteres ou subpalavras mais frequentes em um corpus.
+Função no modelo de linguagem: Permite tokenizar qualquer palavra — inclusive desconhecidas — decompondo-a em subpalavras ou caracteres, eliminando a necessidade de um token especial para palavras fora do vocabulário (<|unk|>).
+Relação com outros conceitos: É o esquema de tokenização usado por GPT-2, GPT-3 e ChatGPT; substitui abordagens mais simples de tokenização baseadas em palavras completas.
+Exemplo conceitual: A palavra "tokenização", se não estiver no vocabulário, pode ser decomposta em subpalavras como ["token", "iza", "ção"].
+context_size
+
+Termo original: context_size
+Tradução/equivalente: Tamanho do contexto (context_size)
+Definição: Parâmetro que define o número de tokens considerados como entrada (janela de contexto) ao gerar pares de entrada-alvo para o treinamento do modelo.
+Função no modelo de linguagem: Determina quantos tokens anteriores o modelo "enxerga" ao prever o próximo token, influenciando sua capacidade de capturar dependências no texto.
+Relação com outros conceitos: Está associado à amostragem com janela deslizante e ao parâmetro stride, que juntos definem como o texto tokenizado é dividido em exemplos de treinamento.
+Exemplo conceitual: Com context_size = 4, a partir da sequência de tokens [1,2,3,4,5], o par (entrada, alvo) gerado é ([1,2,3,4], [2,3,4,5]).
+
+Deep neural networks
+Termo original: Deep Neural Networks
+Tradução/equivalente: Redes neurais profundas
+Definição: Redes neurais com múltiplas camadas que, por processarem apenas operações matemáticas, não conseguem processar texto bruto (categórico) diretamente.
+Função no modelo de linguagem: No contexto deste capítulo, justificam a necessidade da tokenização e do embedding: como o texto é categórico, ele precisa ser convertido em vetores numéricos contínuos antes de ser alimentado à rede.
+Relação com outros conceitos: Motiva diretamente o conceito de embedding e de token IDs, que servem de ponte entre texto bruto e a entrada numérica exigida pela rede.
+Exemplo conceitual: Antes de processar a frase "Olá, mundo!", uma rede neural profunda precisa que ela seja convertida em uma sequência de vetores numéricos (embeddings).
+Embedding
+
+Termo original: Embedding
+Tradução/equivalente: Embedding (representação vetorial); não há tradução consolidada em português
+Definição: Processo — e também o vetor resultante — de conversão de dados discretos, como palavras, em vetores numéricos contínuos processáveis por redes neurais.
+Função no modelo de linguagem: É o mecanismo que transforma texto bruto em uma representação numérica compreensível pela rede, sendo etapa central do pipeline de processamento de um LLM.
+Relação com outros conceitos: Depende da tokenização e dos token IDs como etapas anteriores; é complementado pelos positional embeddings antes de alimentar o LLM.
+Exemplo conceitual: A palavra "gato" pode ser representada pelo vetor [0.12, -0.87, 0.33, ...] em um espaço de embeddings de N dimensões.
+LLMs decoder-only
+
+Termo original: Decoder-only LLMs
+Tradução/equivalente: LLMs somente decodificador (decoder-only)
+Definição: LLMs que utilizam exclusivamente a parte decodificadora da arquitetura Transformer, sem o módulo codificador — o tipo de arquitetura usado pelos modelos GPT.
+Função no modelo de linguagem: É o formato arquitetural adotado pelo modelo que será implementado ao longo do livro, servindo de base para a compreensão dos LLMs modernos do tipo GPT.
+Relação com outros conceitos: Relaciona-se com a arquitetura Transformer (Capítulo 1) e com a geração autorregressiva de texto, prevendo um token de cada vez.
+Exemplo conceitual: O GPT-2, o GPT-3 e o ChatGPT original são exemplos de LLMs decoder-only.
+Lookup
+
+Termo original: Lookup (operation)
+Tradução/equivalente: Operação de busca/consulta (lookup)
+Definição: Operação que recupera o vetor de embedding correspondente a um token ID, consultando diretamente a linha correspondente na matriz de pesos da embedding layer.
+Função no modelo de linguagem: É o mecanismo pelo qual a embedding layer converte um token ID em seu vetor de embedding, substituindo uma multiplicação de matriz completa por uma simples indexação.
+Relação com outros conceitos: Está diretamente ligada à embedding layer do PyTorch e aos token IDs, sendo a etapa final da conversão de texto em vetores numéricos.
+Exemplo conceitual: Se o token ID de "gato" é 57, a operação de lookup retorna a 57ª linha da matriz de embeddings.
+Positional embeddings
+
+Termo original: Positional embeddings
+Tradução/equivalente: Embeddings posicionais
+Definição: Vetores adicionados aos token embeddings para codificar a posição de cada token na sequência, já que o self-attention não possui noção inerente de ordem.
+Função no modelo de linguagem: Permitem que o modelo diferencie a mesma palavra aparecendo em posições diferentes da sequência, preservando a informação sequencial do texto.
+Relação com outros conceitos: Complementam os token embeddings (por soma vetorial) antes de alimentar o LLM; os modelos GPT usam embeddings posicionais absolutos, aprendidos durante o treinamento.
+Exemplo conceitual: A palavra "banco" na posição 2 e na posição 10 de uma frase recebe o mesmo token embedding, mas positional embeddings diferentes, resultando em vetores finais distintos.
+Token IDs
+
+Termo original: Token IDs
+Tradução/equivalente: IDs de token (identificadores numéricos de token)
+Definição: Números inteiros únicos atribuídos a cada token do vocabulário, usados para representar o texto de forma numérica antes da criação dos embeddings.
+Função no modelo de linguagem: Permitem que o texto tokenizado seja processado computacionalmente, servindo de índice para a operação de lookup do vetor de embedding correspondente a cada token.
+Relação com outros conceitos: Resulta do mapeamento do vocabulário sobre os tokens individuais; é convertido em vetores por meio da embedding layer.
+Exemplo conceitual: No vocabulário construído para "The Verdict", o token "the" pode receber, por exemplo, o ID 464.
+
+Tokens individuais
+Termo original: Individual tokens
+Tradução/equivalente: Tokens individuais
+Definição: Unidades resultantes do processo de tokenização, que dividem o texto de entrada em partes menores, como palavras e sinais de pontuação.
+Função no modelo de linguagem: São a unidade básica que alimenta o restante do pipeline do LLM, sendo posteriormente convertidos em token IDs e depois em embeddings.
+Relação com outros conceitos: É o produto direto da tokenização e a base para a criação do vocabulário e dos token IDs.
+Exemplo conceitual: A frase "Olá, mundo!" é dividida nos tokens individuais ["Olá", ",", "mundo", "!"].
