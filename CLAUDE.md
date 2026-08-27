@@ -78,6 +78,7 @@ Texto -> tokenizer.py/bpe.py -> Token IDs -> dataset.py (janela deslizante + Dat
 - `glossaries/` — glossários técnicos por capítulo, um por integrante (`Glossary - João.md`, `Glossary - Laura`). Cada termo segue o formato: tradução, definição, funcionalidade, relação com outros conceitos, exemplo conceitual.
 - `documents/` — relatórios por capítulo (ex.: `Capítulo 1 - Relatório de leitura.docx`, `Capítulo 2 - Relatório da Sprint 2.docx` com a análise dos resultados exigida pela Sprint).
 - `Livro - Build a Large Language Model.pdf` — referência principal do projeto.
+- `Projeto Final.pdf` — enunciado/critérios de avaliação do projeto integrador.
 - `Sprints.txt` — especificação de cada sprint (objetivos, atividades e entregáveis).
 - `README.md` — descrição do projeto e critérios de avaliação.
 
