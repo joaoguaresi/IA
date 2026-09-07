@@ -1,14 +1,16 @@
 """
-Sprint 2 — preparação de dados de texto para um LLM (Capítulo 2).
+Projeto LLM — Sprints 2 e 3.
 
 Fluxo implementado:
 
     Texto -> Tokenização -> Tokens -> Token IDs -> Sequências (entrada, alvo)
-          -> Token Embeddings -> Positional Embeddings -> Lote -> Entrada do modelo
+          -> Token Embeddings -> Positional Embeddings -> Lote        (Sprint 2)
+          -> Self-Attention -> Causal Attention -> Multi-Head Attention (Sprint 3)
+          -> Context vectors -> blocos Transformer                     (Sprint 4)
 
 Uso típico:
 
-    from src import create_dataloader_v1, GPTEmbedding, obter_tokenizador_bpe
+    from sprint2 import create_dataloader_v1, GPTEmbedding, obter_tokenizador_bpe
 
     tokenizador = obter_tokenizador_bpe()
     dataloader = create_dataloader_v1(texto, tokenizer=tokenizador,
@@ -19,9 +21,26 @@ Uso típico:
                           output_dim=768, context_length=256)
     input_embeddings = camada(entradas)   # (8, 256, 768)
 
+    atencao = MultiHeadAttention(d_in=768, d_out=768,
+                                 context_length=256, num_heads=12)
+    context_vectors = atencao(input_embeddings)   # (8, 256, 768)
+
 Requer: torch e tiktoken.
 """
 
+from .attention import (
+    CausalAttention,
+    MultiHeadAttention,
+    MultiHeadAttentionWrapper,
+    SelfAttention_v1,
+    SelfAttention_v2,
+    attention_scores_simples,
+    context_vector_passo_a_passo,
+    entropia_dos_pesos,
+    numero_de_parametros,
+    scaled_dot_product_attention,
+    self_attention_simples,
+)
 from .bpe import BPETokenizerSimples, TiktokenTokenizer, obter_tokenizador_bpe
 from .dataset import (
     GPTDatasetV1,
@@ -71,4 +90,16 @@ __all__ = [
     # pipeline
     "executar_pipeline",
     "ResultadoPipeline",
+    # atenção (Sprint 3)
+    "self_attention_simples",
+    "attention_scores_simples",
+    "context_vector_passo_a_passo",
+    "scaled_dot_product_attention",
+    "SelfAttention_v1",
+    "SelfAttention_v2",
+    "CausalAttention",
+    "MultiHeadAttentionWrapper",
+    "MultiHeadAttention",
+    "entropia_dos_pesos",
+    "numero_de_parametros",
 ]
