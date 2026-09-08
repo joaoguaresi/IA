@@ -8,7 +8,7 @@ Este é o repositório do Projeto Integrador de Inteligência Artificial e Siste
 
 Em vez de usar modelos prontos, cada conceito do livro é implementado manualmente: das leituras iniciais até a arquitetura Transformer completa, o treinamento do modelo, a geração de texto e o fine-tuning final. O projeto começou em 30/07/2026 e a entrega final é em 03/12/2026.
 
-O projeto está na Sprint 2 (tokenização, vocabulário, embeddings e positional embeddings — ver `Sprints.txt`). O código é **incremental**: cada sprint soma componentes aos já implementados em `src/`, formando o pipeline completo do LLM ao final do semestre.
+O projeto está na **Sprint 3** (mecanismos de atenção do Capítulo 3: self-attention, scaled dot-product, causal e multi-head — ver `Sprints.txt`). O código é **incremental**: cada sprint soma componentes aos já implementados em `src/`, formando o pipeline completo do LLM ao final do semestre. As sprints anteriores (0-1: ambiente + Capítulo 1; 2: tokenização, vocabulário, embeddings e positional embeddings) já estão implementadas em `src/`.
 
 ## Fluxo de trabalho (ciclo por capítulo)
 
@@ -21,7 +21,7 @@ Cada capítulo do livro segue o mesmo ciclo, descrito em `Sprints.txt`:
 5. **Experimentação** com diferentes configurações
 6. **Análise dos resultados**, relacionando-os aos conceitos estudados (não apenas código/gráficos)
 
-Consulte `Sprints.txt` para os requisitos detalhados de cada sprint antes de trabalhar em qualquer etapa — ele define exatamente o que deve ser lido, implementado e entregue.
+Consulte `Sprints.txt` para os requisitos detalhados de cada sprint antes de trabalhar em qualquer etapa — ele define exatamente o que deve ser lido, implementado e entregue. Os entregáveis não são só código: cada sprint exige glossário atualizado (`glossaries/`), relatório com a análise técnica (`documents/`) e quiz individual.
 
 ## Comandos comuns
 
@@ -38,45 +38,60 @@ python check_environment.py
 python -m unittest discover -s tests
 
 # rodar um único arquivo/teste
-python -m unittest tests.test_tokenizer
-python -m unittest tests.test_tokenizer.TestTokenizacao.test_separa_pontuacao
+python -m unittest tests.test_attention
+python -m unittest tests.test_attention.TestCausalAttention.test_futuro_tem_peso_zero
 
-# rodar todos os experimentos da sprint atual em sequência
-python experiments/run_all.py
+# rodar todos os experimentos de uma sprint em sequência
+python experiments/run_all.py            # Sprint 2 (exp01-exp06)
+python experiments/run_all_sprint3.py    # Sprint 3 (exp07-exp12)
 
 # rodar um experimento isolado (cada exp*.py também tem um main() executável)
-python experiments/exp01_tokenizacao.py
+python experiments/exp07_self_attention.py
 ```
 
-Os scripts em `experiments/` importam `src` via `sys.path` manipulado em `experiments/_comum.py`, então funcionam quando chamados diretamente com `python experiments/exp0N_*.py` a partir de qualquer diretório — não é necessário instalar o pacote.
+Os scripts em `experiments/` importam `src` via `sys.path` manipulado em `experiments/_comum.py` (que também expõe helpers de impressão de tabela e `salvar_figura`), então funcionam quando chamados diretamente com `python experiments/exp0N_*.py` a partir de qualquer diretório — não é necessário instalar o pacote. Figuras geradas vão para `experiments/figuras/`.
 
 ## Arquitetura
 
-O código em `src/` implementa o pipeline de preparação de dados de um LLM estilo GPT, como uma sequência de módulos que se encaixam (ver docstring de `src/__init__.py` para o fluxo completo):
+O código em `src/` implementa, de ponta a ponta, a entrada de um LLM estilo GPT — do texto bruto aos context vectors do self-attention — como uma sequência de módulos que se encaixam. `src/__init__.py` reexporta a API pública e documenta o fluxo completo:
 
 ```
-Texto -> tokenizer.py/bpe.py -> Token IDs -> dataset.py (janela deslizante + DataLoader)
-      -> embeddings.py (token + positional embeddings) -> entrada do modelo (Sprint 3)
+Texto
+  -> tokenizer.py / bpe.py          Token IDs
+  -> dataset.py                     pares (entrada, alvo) via janela deslizante + DataLoader
+  -> embeddings.py                  token embeddings + positional embeddings  = input embeddings
+  -> attention.py                   self / causal / multi-head attention      = context vectors
+  -> blocos Transformer (Sprint 4)
 ```
+
+### Sprint 2 — preparação de dados e embeddings
 
 - **`src/tokenizer.py`** — tokenização por regex e vocabulário simples (`SimpleTokenizerV1`/`V2`, com tratamento de tokens desconhecidos via `<|unk|>`).
-- **`src/bpe.py`** — tokenização por subpalavras (Byte Pair Encoding): `TiktokenTokenizer` (adaptador do tokenizador oficial do GPT-2 via `tiktoken`) e `BPETokenizerSimples` (implementação didática treinável, sem dependências).
+- **`src/bpe.py`** — tokenização por subpalavras (Byte Pair Encoding): `TiktokenTokenizer` (adaptador do tokenizador oficial do GPT-2 via `tiktoken`) e `BPETokenizerSimples` (implementação didática treinável, sem dependências). `obter_tokenizador_bpe()` devolve o adaptador `tiktoken`.
 - **`src/dataset.py`** — transforma Token IDs em pares (entrada, alvo) via janela deslizante (`criar_pares_janela_deslizante`) e os organiza em lotes com `GPTDatasetV1`/`create_dataloader_v1` (Dataset/DataLoader do PyTorch).
-- **`src/embeddings.py`** — `GPTEmbedding` soma token embeddings e positional embeddings absolutos, produzindo a entrada esperada pelo self-attention da Sprint 3.
-- **`src/pipeline.py`** — integra todas as etapas acima (`executar_pipeline`) e resume as dimensões produzidas em cada uma (`ResultadoPipeline`), usado pelos experimentos para inspecionar o pipeline de ponta a ponta.
+- **`src/embeddings.py`** — `GPTEmbedding` soma token embeddings e positional embeddings absolutos, produzindo a entrada esperada pelo self-attention.
+
+### Sprint 3 — mecanismos de atenção
+
+- **`src/attention.py`** — as quatro variantes do Capítulo 3, na ordem em que o livro as constrói: (1) self-attention simplificado sem pesos treináveis (`self_attention_simples`, `attention_scores_simples`, `context_vector_passo_a_passo`); (2) scaled dot-product com `Wq/Wk/Wv` treináveis (`scaled_dot_product_attention`, `SelfAttention_v1`, `SelfAttention_v2`); (3) causal attention com máscara + dropout (`CausalAttention`); (4) multi-head (`MultiHeadAttentionWrapper` empilha cabeças; `MultiHeadAttention` faz o split em uma única projeção). Todas recebem `(batch, num_tokens, d_in)` e devolvem `(batch, num_tokens, d_out)`, e **guardam os pesos de atenção da última chamada em `ultimo_attn_weights`** para permitir visualização sem recalcular. `entropia_dos_pesos` e `numero_de_parametros` são utilitários de análise usados nos experimentos.
+- **`src/visualizacao.py`** — renderização das matrizes de atenção com matplotlib (`mapa_de_atencao`, `salvar_mapa`, `grade_de_mapas`); usado pelos experimentos de visualização da Sprint 3.
+
+### Integração e dados
+
+- **`src/pipeline.py`** — integra as etapas da Sprint 2 (`executar_pipeline`) e resume as dimensões produzidas em cada uma (`ResultadoPipeline`), usado pelos experimentos para inspecionar o pipeline de ponta a ponta.
 - **`src/dados.py`** — carrega o corpus de treinamento, priorizando `data/the-verdict.txt` (se baixado) sobre `data/amostra.txt`.
 - Todos os tokenizadores (`SimpleTokenizerV1/V2`, `TiktokenTokenizer`, `BPETokenizerSimples`) compartilham a mesma interface (`encode`, `decode`, `n_vocab`, `nome`), o que permite trocá-los livremente em `dataset.py` e `pipeline.py`.
 
-`experiments/exp0N_*.py` espelham as seções do capítulo (um script por subtópico: tokenização, vocabulário/Token IDs, janela deslizante, DataLoader, embeddings, pipeline completo) e reutilizam utilidades de impressão/plot de `experiments/_comum.py`. Figuras geradas vão para `experiments/figuras/`.
+`experiments/exp0N_*.py` espelham as seções do capítulo da sprint (um script por subtópico) e reutilizam utilidades de `experiments/_comum.py`. Sprint 2: `exp01`-`exp06` (tokenização, vocabulário/Token IDs, janela deslizante, DataLoader, embeddings, pipeline completo). Sprint 3: `exp07`-`exp12` (self-attention, scaled dot-product, causal, multi-head, visualizações das matrizes, integração com a saída da Sprint 2).
 
 ## Estrutura do repositório
 
-- `src/` — biblioteca do pipeline de dados do LLM (ver Arquitetura acima), reexportada via `src/__init__.py`.
-- `experiments/` — scripts de experimentação da sprint atual, um por subtópico, mais `run_all.py` para rodar todos.
+- `src/` — biblioteca do pipeline do LLM (ver Arquitetura acima), reexportada via `src/__init__.py`.
+- `experiments/` — scripts de experimentação, um por subtópico, com um `run_all*.py` por sprint. Figuras em `experiments/figuras/`.
 - `tests/` — testes `unittest` (compatíveis com `pytest`) para os módulos de `src/`.
 - `data/` — corpus de treinamento (`amostra.txt`, atualmente o único presente; `src/dados.py` usa `data/the-verdict.txt` em seu lugar automaticamente se ele for baixado).
-- `glossaries/` — glossários técnicos por capítulo, um por integrante (`Glossary - João.md`, `Glossary - Laura`). Cada termo segue o formato: tradução, definição, funcionalidade, relação com outros conceitos, exemplo conceitual.
-- `documents/` — relatórios por capítulo (ex.: `Capítulo 1 - Relatório de leitura.docx`, `Capítulo 2 - Relatório da Sprint 2.docx` com a análise dos resultados exigida pela Sprint).
+- `glossaries/` — glossários técnicos cumulativos, um por integrante (`Glossary - João.md`, `Glossary - Laura`). Cada nova sprint acrescenta uma seção `# Glossário — Capítulo N`. Cada termo segue o formato: termo original, tradução, definição, função no modelo, relação com outros conceitos, exemplo.
+- `documents/` — relatórios por capítulo (ex.: `Capítulo 2 - Relatório da Sprint 2.docx` com a análise dos resultados exigida pela Sprint).
 - `Livro - Build a Large Language Model.pdf` — referência principal do projeto.
 - `Projeto Final.pdf` — enunciado/critérios de avaliação do projeto integrador.
 - `Sprints.txt` — especificação de cada sprint (objetivos, atividades e entregáveis).
@@ -84,7 +99,8 @@ Texto -> tokenizer.py/bpe.py -> Token IDs -> dataset.py (janela deslizante + Dat
 
 ## Convenções
 
-- Arquivos de glossário por pessoa seguem o padrão `Glossary - <Nome>` (sem extensão consistente — alguns são `.md`, outros texto puro).
-- Todo o conteúdo (glossários, relatórios, commits, docstrings, nomes de funções/variáveis) é escrito em português do Brasil — incluindo o código em `src/` e `experiments/`, que usa nomes em português (`tokenizar`, `construir_vocabulario`, `criar_pares_janela_deslizante`) mesmo ao envolver termos técnicos do livro em inglês (Token IDs, embeddings).
+- Arquivos de glossário por pessoa seguem o padrão `Glossary - <Nome>` (sem extensão consistente — alguns são `.md`, outros texto puro). São cumulativos: cada sprint adiciona a seção do novo capítulo sem remover as anteriores.
+- Todo o conteúdo (glossários, relatórios, commits, docstrings, nomes de funções/variáveis) é escrito em português do Brasil — incluindo o código em `src/` e `experiments/`, que usa nomes em português (`tokenizar`, `construir_vocabulario`, `criar_pares_janela_deslizante`, `entropia_dos_pesos`) mesmo ao envolver termos técnicos do livro em inglês (Token IDs, embeddings, self-attention). Nomes consagrados de classes/APIs do livro são mantidos como no original (`SelfAttention_v2`, `MultiHeadAttention`, `create_dataloader_v1`).
 - Cada módulo/função em `src/` referencia no docstring a seção do capítulo do livro que implementa — mantenha esse vínculo ao adicionar código novo.
-- Quando código for adicionado nas próximas sprints, ele deve ser organizado de forma incremental (cada sprint constrói sobre os componentes das anteriores), já que o pipeline final integra tokenização → embeddings → atenção → Transformer → treinamento → geração → fine-tuning.
+- Código novo é organizado de forma incremental (cada sprint constrói sobre os componentes das anteriores) e sua API pública é adicionada aos imports e ao `__all__` de `src/__init__.py`, agrupada por sprint. O pipeline final integra tokenização → embeddings → atenção → Transformer → treinamento → geração → fine-tuning.
+- Módulos de atenção expõem os pesos da última passada em `ultimo_attn_weights`; experimentos de visualização dependem disso — preserve esse contrato ao mexer em `src/attention.py`.
