@@ -554,3 +554,196 @@
 - **Exemplo conceitual:** Escolher `batch_size=8` em vez de `batch_size=1` é um trade-off entre uso de memória e estabilidade das atualizações de peso.
 
 ---
+
+# Glossário — Capítulo 3: Coding Attention Mechanisms
+
+---
+
+### 1. Attention Mechanism (Mecanismo de Atenção)
+- **Tradução:** Mecanismo de atenção
+- **Definição:** Componente que permite a um modelo ponderar dinamicamente a relevância de diferentes partes de uma sequência de entrada ao processar cada elemento, superando a limitação das RNNs encoder-decoder de comprimir toda a entrada em um único estado oculto.
+- **Funcionalidade:** Dá ao decodificador acesso seletivo a todos os tokens de entrada, e não apenas ao último estado oculto do encoder, permitindo capturar dependências de longo alcance.
+- **Relação com outros conceitos:** Motivado pela limitação das RNNs encoder-decoder (seção 3.1) e pelo mecanismo de Bahdanau Attention (2014); é generalizado pelo self-attention usado no Transformer (Capítulo 1).
+- **Exemplo conceitual:** Ao traduzir "Kannst du mir helfen diesen Satz zu übersetzen", o modelo pode acessar diretamente palavras distantes da entrada alemã ao gerar cada palavra da tradução em inglês, em vez de depender só do estado oculto final do encoder.
+
+---
+
+### 2. Bahdanau Attention
+- **Tradução:** Atenção de Bahdanau
+- **Definição:** Mecanismo de atenção proposto em 2014 para RNNs encoder-decoder, que permite ao decoder acessar seletivamente diferentes partes da sequência de entrada a cada passo de decodificação.
+- **Funcionalidade:** Resolveu o gargalo das RNNs, que precisavam codificar toda a frase de entrada em um único vetor de estado oculto antes de iniciar a decodificação.
+- **Relação com outros conceitos:** Precursor histórico do self-attention; três anos depois, pesquisadores mostraram que RNNs nem eram necessárias, propondo a arquitetura Transformer com self-attention.
+- **Exemplo conceitual:** Ao gerar o segundo token de saída de uma tradução, o modelo pondera com pesos diferentes (proporcionais à importância) cada token da frase alemã de entrada, em vez de usar só o último estado oculto.
+
+---
+
+### 3. Context Vector (Vetor de Contexto)
+- **Tradução:** Vetor de contexto
+- **Definição:** Embedding enriquecido de um token, obtido como soma ponderada de todos os vetores de entrada (ou de valor) da sequência, incorporando informação de todo o contexto.
+- **Funcionalidade:** Substitui o embedding "estático" do token por uma representação que já reflete sua relação com os demais tokens da sequência.
+- **Relação com outros conceitos:** É a saída de qualquer variante de self-attention; no livro, z(2) é o vetor de contexto do token "journey" na frase "Your journey starts with one step."
+- **Exemplo conceitual:** No self-attention simplificado, `z(2) = tensor([0.4419, 0.6515, 0.5683])`, calculado como soma ponderada dos 6 vetores de entrada usando os pesos de atenção relativos a "journey".
+
+---
+
+### 4. Attention Score (Score de Atenção)
+- **Tradução:** Score (pontuação) de atenção
+- **Definição:** Valor intermediário e não normalizado que mede a similaridade entre um token de consulta e cada token da sequência, calculado via produto escalar.
+- **Funcionalidade:** É a primeira das três etapas do self-attention (score → peso → vetor de contexto); quanto maior o produto escalar, maior a similaridade entre os vetores.
+- **Relação com outros conceitos:** É normalizado via softmax para se tornar um attention weight; no self-attention com pesos treináveis, é calculado entre query e key em vez de entre inputs brutos.
+- **Exemplo conceitual:** Os scores do token "journey" (query) contra os 6 tokens de "Your journey starts with one step" são `[0.9544, 1.4950, 1.4754, 0.8434, 0.7070, 1.0865]`.
+
+---
+
+### 5. Attention Weight (Peso de Atenção)
+- **Tradução:** Peso de atenção
+- **Definição:** Score de atenção normalizado (via softmax) de modo que os pesos relativos a cada consulta somem 1.
+- **Funcionalidade:** Determina o quanto cada token de entrada contribui para o vetor de contexto do token atual; funciona como uma distribuição de probabilidade interpretável.
+- **Relação com outros conceitos:** Não deve ser confundido com os *weight parameters* (Wq, Wk, Wv) — pesos de atenção são dinâmicos e dependem da entrada, enquanto os parâmetros são aprendidos e fixos após o treino.
+- **Exemplo conceitual:** Os pesos de atenção de "journey" somam 1: `[0.1385, 0.2379, 0.2333, 0.1240, 0.1082, 0.1581]`.
+
+---
+
+### 6. Self-Attention Simplificado (sem pesos treináveis)
+- **Tradução:** Self-attention simplificado
+- **Definição:** Variante didática do self-attention em que os vetores de contexto são calculados diretamente a partir dos produtos escalares entre os próprios embeddings de entrada, sem nenhuma matriz de pesos treinável.
+- **Funcionalidade:** Introduz as três etapas centrais do self-attention — scores, pesos (softmax) e vetor de contexto — antes de adicionar complexidade.
+- **Relação com outros conceitos:** Generalizado para todos os tokens simultaneamente via `attn_scores = inputs @ inputs.T`; é a base sobre a qual se constrói o self-attention com pesos treináveis. Implementado em `self_attention_simples`/`attention_scores_simples` em `src/attention.py`.
+- **Exemplo conceitual:** Para os 6 tokens de "Your journey starts with one step", a matriz de pesos de atenção completa tem forma (6, 6), e `all_context_vecs = attn_weights @ inputs` gera os 6 vetores de contexto de uma vez.
+
+---
+
+### 7. Query, Key e Value (Consulta, Chave e Valor)
+- **Tradução:** Consulta, chave e valor
+- **Definição:** Três projeções vetoriais de cada token de entrada, obtidas via matrizes de pesos treináveis Wq, Wk e Wv, inspiradas em sistemas de recuperação de informação (bancos de dados).
+- **Funcionalidade:** A query representa o token atual "procurando" informação; a key é usada para casar com a query (via produto escalar); a value é o conteúdo efetivamente recuperado e combinado no vetor de contexto.
+- **Relação com outros conceitos:** São a base do scaled dot-product attention; substituem, no self-attention treinável, o uso direto dos embeddings de entrada do self-attention simplificado.
+- **Exemplo conceitual:** Para "journey" (query) com `d_in=3` e `d_out=2`, `query_2 = x_2 @ W_query` resulta em `tensor([0.4306, 1.4551])`.
+
+---
+
+### 8. Weight Matrices Wq, Wk, Wv (Matrizes de Pesos de Atenção)
+- **Tradução:** Matrizes de pesos de query, key e value
+- **Definição:** Matrizes treináveis (de forma `d_in × d_out`) que projetam os embeddings de entrada nos espaços de query, key e value.
+- **Funcionalidade:** São ajustadas por backpropagation durante o treino para que o modelo aprenda a produzir vetores de contexto úteis à tarefa de prever o próximo token.
+- **Relação com outros conceitos:** Implementadas primeiro com `nn.Parameter(torch.rand(...))` (`SelfAttention_v1`) e depois com `nn.Linear` (`SelfAttention_v2`), que usa um esquema de inicialização mais estável para o treino.
+- **Exemplo conceitual:** `W_query = torch.nn.Parameter(torch.rand(d_in, d_out))` inicializa a matriz de pesos de query com `d_in=3` linhas e `d_out=2` colunas.
+
+---
+
+### 9. Scaled Dot-Product Attention
+- **Tradução:** Atenção por produto escalar escalonado
+- **Definição:** Mecanismo de self-attention com pesos treináveis (Wq, Wk, Wv) em que os scores de atenção são divididos pela raiz quadrada da dimensão das keys antes do softmax.
+- **Funcionalidade:** A escala evita que produtos escalares muito grandes (comuns quando a dimensão do embedding é alta, >1.000 em LLMs reais) levem o softmax a se comportar como uma função degrau, gerando gradientes próximos de zero e travando o treino.
+- **Relação com outros conceitos:** É o self-attention usado na arquitetura Transformer original e nos modelos GPT; implementado em `scaled_dot_product_attention`/`SelfAttention_v1`/`SelfAttention_v2`, servindo de base para `CausalAttention`.
+- **Exemplo conceitual:** `attn_weights_2 = torch.softmax(attn_scores_2 / d_k**0.5, dim=-1)`, com `d_k = keys.shape[-1] = 2`, produz `[0.1500, 0.2264, 0.2199, 0.1311, 0.0906, 0.1820]`.
+
+---
+
+### 10. Causal Attention (Atenção Causal) / Masked Attention
+- **Tradução:** Atenção causal / atenção mascarada
+- **Definição:** Forma especializada de self-attention em que cada token só pode atender a si mesmo e aos tokens anteriores da sequência, nunca aos futuros.
+- **Funcionalidade:** Garante a ordem temporal necessária para a geração autorregressiva de texto — ao prever o próximo token, o modelo não pode "espiar" tokens que ainda não deveria conhecer.
+- **Relação com outros conceitos:** Implementada zerando (ou definindo como `-inf`) os pesos/scores de atenção acima da diagonal principal da matriz de atenção; é essencial para os modelos GPT (decoder-only). Implementada em `CausalAttention` (`src/attention.py`).
+- **Exemplo conceitual:** Para "journey" (linha 2), a atenção só é mantida para "Your" e "journey"; os pesos para "starts", "with", "one" e "step" são zerados e a linha é renormalizada para somar 1.
+
+---
+
+### 11. Causal Mask (Máscara Causal)
+- **Tradução:** Máscara causal
+- **Definição:** Matriz triangular usada para bloquear a atenção a posições futuras — via `torch.tril` (1s abaixo/na diagonal) combinada com multiplicação, ou via `torch.triu` (1s acima da diagonal) combinada com `masked_fill(-inf)`.
+- **Funcionalidade:** A abordagem com `-inf` antes do softmax é mais eficiente: como e^-∞ = 0, o softmax já produz pesos zerados e normalizados em uma única etapa, sem precisar renormalizar depois.
+- **Relação com outros conceitos:** Está ligada ao problema do information leakage; é armazenada como buffer (`register_buffer`) na classe `CausalAttention`, para ser movida automaticamente entre CPU/GPU junto com o modelo.
+- **Exemplo conceitual:** `mask = torch.triu(torch.ones(6, 6), diagonal=1)` seguido de `attn_scores.masked_fill(mask.bool(), -torch.inf)` produz scores como `tensor([[0.2899, -inf, -inf, -inf, -inf, -inf], ...])`.
+
+---
+
+### 12. Information Leakage (Vazamento de Informação)
+- **Tradução:** Vazamento de informação
+- **Definição:** Risco aparente de que tokens futuros, mesmo mascarados, ainda influenciem o resultado por terem participado do cálculo original do softmax antes da renormalização.
+- **Funcionalidade (por que não ocorre):** Matematicamente, renormalizar os pesos após zerar as posições futuras equivale a calcular o softmax apenas sobre o subconjunto de posições não mascaradas — como se as posições futuras nunca tivessem existido no cálculo.
+- **Relação com outros conceitos:** Justifica por que a máscara causal (com renormalização, ou com `-inf` antes do softmax) é matematicamente correta e segura para geração autorregressiva.
+- **Exemplo conceitual:** A linha de "journey" no exemplo do livro soma exatamente 1,0 mesmo depois de zerar os pesos das posições futuras e redividir os valores restantes pela soma da linha.
+
+---
+
+### 13. Dropout (na Atenção)
+- **Tradução:** Dropout (na atenção)
+- **Definição:** Técnica que zera aleatoriamente uma fração dos pesos de atenção durante o treino, reescalando os valores remanescentes pelo inverso da taxa mantida (ex.: ×2 para dropout de 50%).
+- **Funcionalidade:** Reduz o overfitting evitando que o modelo dependa excessivamente de conexões de atenção específicas; é desativado na inferência.
+- **Relação com outros conceitos:** Aplicado após o cálculo dos pesos de atenção (convenção adotada no livro) e integrado à `CausalAttention`/`MultiHeadAttention` via `self.dropout = nn.Dropout(dropout)`; no treino real de LLMs usa-se uma taxa baixa (0,1–0,2), bem menor que os 50% do exemplo didático.
+- **Exemplo conceitual:** `torch.nn.Dropout(0.5)` aplicado a uma matriz de 1s produz aproximadamente metade dos valores zerados e a outra metade escalada para 2.0.
+
+---
+
+### 14. Multi-Head Attention
+- **Tradução:** Atenção multi-cabeça
+- **Definição:** Extensão do self-attention/causal attention em que o mecanismo é executado várias vezes em paralelo ("cabeças"), cada uma com suas próprias projeções Wq, Wk, Wv, e os resultados são combinados.
+- **Funcionalidade:** Permite ao modelo atender simultaneamente a diferentes aspectos/subespaços de representação da entrada, em vez de se limitar a um único padrão de atenção.
+- **Relação com outros conceitos:** É a última das quatro variantes construídas incrementalmente no capítulo (simplificado → treinável → causal → multi-head); é o componente usado diretamente nos blocos Transformer da Sprint 4. Implementada em `MultiHeadAttentionWrapper`/`MultiHeadAttention`.
+- **Exemplo conceitual:** Com `num_heads=2` e `d_out=2` por cabeça, a saída final tem 4 dimensões (`d_out × num_heads`), combinando dois conjuntos de vetores de contexto Z1 e Z2.
+
+---
+
+### 15. Head (Cabeça de Atenção) e Head Dimension
+- **Tradução:** Cabeça de atenção / dimensão da cabeça
+- **Definição:** Cada "cabeça" é uma instância independente do mecanismo de atenção; `head_dim = d_out / num_heads` é a dimensão do vetor de contexto produzido por cada cabeça antes da combinação final.
+- **Funcionalidade:** Múltiplas cabeças com dimensão reduzida (em vez de uma única cabeça com dimensão completa) permitem capturar padrões de atenção diferentes a um custo computacional comparável.
+- **Relação com outros conceitos:** Na `MultiHeadAttention`, `d_out` precisa ser divisível por `num_heads` (`assert d_out % num_heads == 0`); nos modelos GPT-2, o menor tem 12 cabeças com embedding de 768 dimensões, o maior tem 25 cabeças com 1.600 dimensões.
+- **Exemplo conceitual:** `MultiHeadAttention(d_in=3, d_out=2, ..., num_heads=2)` gera `head_dim = 1`: cada cabeça processa vetores de contexto de 1 dimensão antes de serem recombinados em 2.
+
+---
+
+### 16. MultiHeadAttentionWrapper (Empilhamento de Cabeças)
+- **Tradução:** Wrapper de atenção multi-cabeça
+- **Definição:** Implementação inicial e mais intuitiva de multi-head attention, que instancia múltiplos objetos `CausalAttention` independentes e concatena suas saídas ao longo da última dimensão.
+- **Funcionalidade:** Cada cabeça processa a sequência inteira de forma sequencial (via list comprehension), com sua própria matriz de pesos — conceitualmente simples, mas computacionalmente repetitivo.
+- **Relação com outros conceitos:** É substituído, por eficiência, pela classe `MultiHeadAttention`, que faz a mesma coisa com apenas uma projeção linear e um split de tensor.
+- **Exemplo conceitual:** `torch.cat([head(x) for head in self.heads], dim=-1)` concatena as saídas de duas `CausalAttention`, produzindo `context_vecs.shape == torch.Size([2, 6, 4])` a partir de duas cabeças de saída 2.
+
+---
+
+### 17. MultiHeadAttention com Weight Splits (Implementação Eficiente)
+- **Tradução:** Atenção multi-cabeça com divisão de pesos
+- **Definição:** Implementação que integra todas as cabeças em uma única classe, projetando queries/keys/values uma única vez com matrizes maiores e depois "dividindo" (`.view`) e transpondo (`.transpose`) os tensores para separar as cabeças.
+- **Funcionalidade:** Evita repetir a multiplicação de matrizes para cada cabeça (o passo computacionalmente mais caro); usa multiplicação de matrizes em lote (batched matrix multiplication) para calcular todas as cabeças de uma vez.
+- **Relação com outros conceitos:** Reshape `(b, num_tokens, d_out)` → `(b, num_tokens, num_heads, head_dim)` → transpõe para `(b, num_heads, num_tokens, head_dim)`; ao final, transpõe de volta e achata para `(b, num_tokens, d_out)`. É a classe efetivamente usada na LLM do Capítulo 4.
+- **Exemplo conceitual:** `MultiHeadAttention(d_in=3, d_out=2, context_length=6, dropout=0.0, num_heads=2)` aplicada a um batch de forma `(2, 6, 3)` devolve vetores de contexto de forma `(2, 6, 2)`.
+
+---
+
+### 18. Output Projection Layer (`out_proj`)
+- **Tradução:** Camada de projeção de saída
+- **Definição:** Camada linear adicional (`nn.Linear(d_out, d_out)`) aplicada após a combinação das cabeças em `MultiHeadAttention`.
+- **Funcionalidade:** Mistura as informações vindas de diferentes cabeças antes de passar adiante; não é estritamente necessária, mas é comum em arquiteturas de LLM.
+- **Relação com outros conceitos:** Presente na `MultiHeadAttention`, mas ausente na `CausalAttention` de cabeça única — é uma diferença estrutural entre as duas classes.
+- **Exemplo conceitual:** `context_vec = self.out_proj(context_vec)` é a última operação antes de retornar o vetor de contexto final da `MultiHeadAttention`.
+
+---
+
+### 19. Batched Matrix Multiplication (Multiplicação de Matrizes em Lote)
+- **Tradução:** Multiplicação de matrizes em lote
+- **Definição:** Operação em que o PyTorch aplica a multiplicação de matrizes às duas últimas dimensões de tensores de 4 dimensões (ou mais), repetindo automaticamente para cada "lote" das dimensões anteriores (batch e heads).
+- **Funcionalidade:** Permite calcular os scores de atenção de todas as cabeças e de todas as amostras do batch em uma única operação vetorizada, sem loops explícitos.
+- **Relação com outros conceitos:** Usada em `attn_scores = queries @ keys.transpose(2, 3)` dentro de `MultiHeadAttention`, onde queries/keys têm forma `(b, num_heads, num_tokens, head_dim)`.
+- **Exemplo conceitual:** Para um tensor de forma `(1, 2, 3, 4)`, `a @ a.transpose(2, 3)` calcula, em uma única chamada, o produto interno de cada uma das 2 cabeças separadamente — equivalente a fazer `first_head @ first_head.T` e `second_head @ second_head.T` manualmente.
+
+---
+
+### 20. register_buffer
+- **Tradução:** Registro de buffer (não treinável)
+- **Definição:** Método do PyTorch (`nn.Module.register_buffer`) que registra um tensor como parte do estado do módulo sem torná-lo um parâmetro treinável.
+- **Funcionalidade:** Garante que a máscara causal seja movida automaticamente entre CPU e GPU junto com o restante do modelo, evitando erros de dispositivo incompatível, sem participar do treino via backpropagation.
+- **Relação com outros conceitos:** Usado em `CausalAttention` e `MultiHeadAttention` para armazenar a máscara triangular (`self.mask`), que é fixa e não aprendida.
+- **Exemplo conceitual:** `self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length), diagonal=1))` cria a máscara uma única vez na inicialização, reutilizada em cada chamada de `forward`.
+
+---
+
+### 21. Weight Parameters vs. Attention Weights (Distinção)
+- **Tradução:** Parâmetros de peso vs. pesos de atenção
+- **Definição:** "Weight" nas matrizes Wq, Wk, Wv refere-se aos parâmetros aprendidos da rede (fixos após o treino); "attention weight" é o valor dinâmico e específico ao contexto que determina a importância relativa de cada token.
+- **Funcionalidade:** Evita a confusão comum entre os dois usos da palavra "peso" no capítulo — um é estrutural (parâmetro), o outro é uma saída calculada a cada chamada do forward.
+- **Relação com outros conceitos:** Complementa o termo "Parâmetros" já definido no Capítulo 1; os pesos de atenção dependem da entrada atual, enquanto os parâmetros (Wq, Wk, Wv) só mudam durante o treino.
+- **Exemplo conceitual:** A mesma matriz `W_query` (parâmetro fixo) gera pesos de atenção diferentes para "journey" e para "step", pois os pesos de atenção dependem do token de consulta específico, não apenas da matriz.
+
+---
