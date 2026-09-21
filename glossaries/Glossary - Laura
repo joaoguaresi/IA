@@ -193,3 +193,389 @@ Definição: Unidades resultantes do processo de tokenização, que dividem o te
 Função no modelo de linguagem: São a unidade básica que alimenta o restante do pipeline do LLM, sendo posteriormente convertidos em token IDs e depois em embeddings.
 Relação com outros conceitos: É o produto direto da tokenização e a base para a criação do vocabulário e dos token IDs.
 Exemplo conceitual: A frase "Olá, mundo!" é dividida nos tokens individuais ["Olá", ",", "mundo", "!"].
+
+
+CAPÍTULO 3
+Attention mechanism
+Termo original: Attention mechanism
+Tradução/equivalente: Mecanismo de atenção
+Definição: Componente que calcula, para cada elemento processado, um peso de relevância sobre todos os elementos disponíveis, e produz a saída como combinação ponderada deles.
+Função no modelo de linguagem: É o que permite ao LLM tratar a frase como um conjunto de relações, e não como uma sequência lida em ordem. Substitui a memória comprimida da RNN por acesso direto a qualquer posição.
+Relação com outros conceitos: É o conceito guarda-chuva: self-attention, causal attention e multi-head attention são especializações dele. Surgiu como correção do gargalo do hidden state das RNNs.
+Exemplo conceitual: Ao processar “o gato que estava no telhado dormiu”, o mecanismo liga “dormiu” a “gato” com peso alto e a “telhado” com peso baixo, mesmo havendo cinco palavras entre eles.
+
+Attention score (ω)
+Termo original: Attention score (omega, ω)
+Tradução/equivalente: Pontuação de atenção
+Definição: Valor bruto, não normalizado, que mede a afinidade entre uma query e um key. Obtido pelo dot product entre os dois vetores.
+Função no modelo de linguagem: É a matéria-prima da decisão de relevância. Ainda não é interpretável como proporção, porque não está normalizado nem limitado a um intervalo.
+Relação com outros conceitos: Torna-se attention weight (α) após a softmax. Na versão com pesos treináveis é dividido por √d_k antes da normalização; na causal attention, alguns scores são substituídos por −∞.
+Exemplo conceitual: ω₂₁ = x⁽²⁾ · x⁽¹⁾ = 0,9544 e ω₂₂ = 1,4950 — o token 2 tem afinidade maior consigo mesmo do que com o token 1.
+
+Attention weight (α)
+Termo original: Attention weight (alpha, α)
+Tradução/equivalente: Peso de atenção
+Definição: Attention score normalizado pela softmax. Todos os pesos de uma mesma linha somam exatamente 1,0.
+Função no modelo de linguagem: Determina a fração de cada vetor que entra no context vector. É o valor que se inspeciona para entender em que o modelo “olhou” ao processar um token.
+Relação com outros conceitos: Deriva do attention score. Não deve ser confundido com weight parameters (Wq, Wk, Wv): os α mudam a cada entrada, os W só mudam durante o treinamento.
+Exemplo conceitual: α₂ = [0,1385; 0,2379; 0,2333; 0,1240; 0,1082; 0,1581], soma 1,0000 — o token 2 destina 23,8% da sua atenção a si mesmo.
+
+Backpropagation
+Termo original: Backpropagation / gradient
+Tradução/equivalente: Retropropagação / gradiente
+Definição: Algoritmo que propaga o erro da saída de volta pela rede, calculando quanto cada parâmetro contribuiu para ele.
+Função no modelo de linguagem: É o que atualiza Wq, Wk e Wv. Sem gradientes utilizáveis, o módulo de atenção não aprende nada.
+Relação com outros conceitos: É a razão de ser do escalonamento por √d_k: gradientes próximos de zero, causados pela saturação da softmax, travam o aprendizado.
+Exemplo conceitual: requires_grad=False nos exemplos do livro desliga o cálculo de gradientes para deixar as saídas mais limpas; no treinamento real o valor é True.
+
+Bahdanau attention
+Termo original: Bahdanau attention
+Tradução/equivalente: Atenção de Bahdanau
+Definição: Mecanismo proposto em 2014 que permite ao decoder de uma RNN acessar seletivamente todos os estados do encoder a cada passo de decodificação, em vez de apenas o último.
+Função no modelo de linguagem: Historicamente, é o antecessor direto do self-attention. Introduziu a ideia de pesos de importância aprendidos sobre posições da entrada.
+Relação com outros conceitos: Relaciona duas sequências distintas (entrada e saída). O self-attention é a generalização que relaciona uma sequência consigo mesma — daí o prefixo “self”.
+Exemplo conceitual: Ao gerar a segunda palavra da tradução, o decoder distribui pesos sobre todos os tokens de entrada: 0,6 para “du”, 0,2 para “Kannst” e 0,2 para o restante.
+
+Batched matrix multiplication
+Termo original: Batched matrix multiplication
+Tradução/equivalente: Multiplicação de matrizes em lote
+Definição: Multiplicação aplicada simultaneamente a todas as cabeças e a todas as sequências do batch, operando nas duas últimas dimensões do tensor.
+Função no modelo de linguagem: É a origem do ganho de desempenho da classe MultiHeadAttention: uma única chamada substitui num_heads chamadas independentes.
+Relação com outros conceitos: Depende do formato (b, num_heads, num_tokens, head_dim) produzido pelas operações .view() e .transpose().
+Exemplo conceitual: attn_scores = queries @ keys.transpose(2, 3) — o PyTorch repete a multiplicação para cada combinação de batch e cabeça automaticamente.
+
+Causal attention
+Termo original: Causal attention / masked attention
+Tradução/equivalente: Atenção causal / atenção mascarada
+Definição: Variante do self-attention em que cada token só pode atender a si mesmo e às posições anteriores; as posições futuras são bloqueadas.
+Função no modelo de linguagem: É o que torna possível treinar por previsão da próxima palavra. Sem a máscara, o modelo veria a resposta e a tarefa perderia o sentido.
+Relação com outros conceitos: Aplica-se sobre o scaled dot-product attention. É o que distingue um decoder (GPT) de um encoder (BERT), que usa atenção bidirecional.
+Exemplo conceitual: Matriz resultante: linha 1 = [1,0000; 0; 0; 0; 0; 0]; linha 2 = [0,5517; 0,4483; 0; 0; 0; 0] — cada linha ganha uma posição visível.
+
+Causal attention mask
+Termo original: Causal attention mask
+Tradução/equivalente: Máscara de atenção causal
+Definição: Matriz triangular que marca quais posições da matriz de atenção devem ser bloqueadas — todas as que ficam acima da diagonal principal.
+Função no modelo de linguagem: Materializa a restrição causal. É registrada uma única vez no construtor e reutilizada em todo forward pass, truncada para o número de tokens da entrada.
+Relação com outros conceitos: Construída com torch.triu ou torch.tril, aplicada via masked_fill e armazenada com register_buffer.
+Exemplo conceitual: self.mask[:num_tokens, :num_tokens] — o truncamento permite processar sequências menores que context_length sem recriar a máscara.
+
+Context vector (z⁽ⁱ⁾)
+Termo original: Context vector
+Tradução/equivalente: Vetor de contexto
+Definição: Vetor de saída do self-attention para o token i. É a soma dos vetores da sequência ponderada pelos attention weights daquele token.
+Função no modelo de linguagem: Substitui o embedding isolado do token por uma representação que já incorpora o contexto. É o que o bloco transformer seguinte consome.
+Relação com outros conceitos: Produzido a partir dos attention weights (α) e dos vetores de entrada — ou dos values, na versão com pesos treináveis. É o análogo distribuído do hidden state da RNN.
+Exemplo conceitual: Para a entrada de seis tokens por três dimensões usada no livro, z⁽²⁾ = [0,4419; 0,6515; 0,5683] — três números que resumem “journey” já contextualizado.
+
+context_length
+Termo original: context_length
+Tradução/equivalente: Comprimento de contexto
+Definição: Número máximo de tokens que o modelo consegue processar em uma única passagem. Define o tamanho da máscara causal.
+Função no modelo de linguagem: É o limite rígido da janela de atenção. Determina quanto texto anterior o modelo pode consultar ao gerar o próximo token.
+Relação com outros conceitos: Implica custo quadrático: o número de células de atenção é batch × cabeças × context_length². É o principal gargalo de memória do transformer.
+Exemplo conceitual: O menor GPT-2 suporta 1.024 tokens. Com 12 cabeças, isso resulta em 12 × 1.024² ≈ 12,6 milhões de células por sequência.
+
+d_in / d_out
+Termo original: d_in / d_out
+Tradução/equivalente: Dimensão de entrada / dimensão de saída
+Definição: d_in é o número de features de cada token que entra no módulo; d_out é a dimensão dos vetores query, key e value produzidos.
+Função no modelo de linguagem: Controlam a capacidade do módulo. Em modelos GPT reais d_in é igual a d_out, o que permite empilhar blocos transformer sem adaptadores de dimensão.
+Relação com outros conceitos: d_out é o valor fatiado entre as cabeças no multi-head (head_dim = d_out // num_heads). d_in vem do embedding size definido no Capítulo 2.
+Exemplo conceitual: No livro, d_in = 3 e d_out = 2, para caber na página. No menor GPT-2, d_in = d_out = 768.
+
+d_k
+Termo original: d_k
+Tradução/equivalente: Dimensão dos keys
+Definição: Número de componentes de cada vetor key. Na prática coincide com d_out — ou com head_dim, no multi-head.
+Função no modelo de linguagem: É o valor cuja raiz quadrada escala os attention scores. Quanto maior d_k, maiores tendem a ser os dot products e mais necessária a correção.
+Relação com outros conceitos: Entra diretamente no fator √d_k. No código é obtido como keys.shape[-1].
+Exemplo conceitual: d_k = keys.shape[-1]; attn_scores / d_k**0.5 — elevar a 0.5 equivale a extrair a raiz quadrada.
+
+Dot product
+Termo original: Dot product
+Tradução/equivalente: Produto escalar
+Definição: Operação que multiplica dois vetores elemento a elemento e soma os produtos, devolvendo um único número.
+Função no modelo de linguagem: É a medida de similaridade usada em todo o mecanismo: quanto mais alinhados os vetores, maior o valor e maior a atenção entre os dois tokens.
+Relação com outros conceitos: Gera os attention scores. Aplicado a todos os pares de uma vez, torna-se multiplicação de matrizes. Seu crescimento com a dimensão é o que exige o escalonamento por √d_k.
+Exemplo conceitual: torch.dot([0.43, 0.15, 0.89], [0.55, 0.87, 0.66]) = 0,43·0,55 + 0,15·0,87 + 0,89·0,66 = 0,9544
+
+Dropout
+Termo original: Dropout
+Tradução/equivalente: Descarte aleatório
+Definição: Técnica de regularização que zera aleatoriamente uma fração dos valores durante o treinamento, sendo desativada na inferência.
+Função no modelo de linguagem: Impede que o modelo dependa excessivamente de um conjunto fixo de conexões. No transformer é aplicado sobre os attention weights, depois da softmax.
+Relação com outros conceitos: Atua em conjunto com a máscara causal: a máscara é determinística, o dropout é aleatório. Só existe durante o treinamento.
+Exemplo conceitual: self.dropout = nn.Dropout(0.1); attn_weights = self.dropout(attn_weights) — 10% dos pesos são zerados a cada passo.
+
+Dropout rate
+Termo original: Dropout rate / rescaling
+Tradução/equivalente: Taxa de descarte / reescalonamento
+Definição: Proporção de valores zerados pelo dropout. Os valores sobreviventes são multiplicados por 1 dividido pela taxa restante, para compensar a perda.
+Função no modelo de linguagem: O reescalonamento mantém a magnitude média da atenção consistente entre treino e inferência; sem ele, a saída encolheria quando o dropout fosse desligado.
+Relação com outros conceitos: Interage com overfitting: taxas altas regularizam mais, mas prejudicam o aprendizado. O livro usa 0,5 na demonstração e 0,1 a 0,2 no treinamento do GPT.
+Exemplo conceitual: Com taxa 0,5, os elementos restantes são multiplicados por 1/0,5 = 2, de modo que uma matriz de 1s se transforma em uma matriz de 0s e 2s.
+
+Forward pass
+Termo original: Forward pass
+Tradução/equivalente: Passagem para frente
+Definição: Percurso dos dados da entrada até a saída do módulo, implementado no método forward().
+Função no modelo de linguagem: Define a sequência de operações do mecanismo: projeta Q, K e V, calcula os scores, aplica a máscara, normaliza, aplica dropout e agrega os values.
+Relação com outros conceitos: É o caminho que o backpropagation percorre na direção inversa para calcular gradientes. É chamado implicitamente ao escrever modelo(entrada).
+Exemplo conceitual: keys = self.W_key(x) → attn_scores = queries @ keys.transpose(1, 2) → softmax → dropout → context_vec = attn_weights @ values
+
+Head
+Termo original: Head
+Tradução/equivalente: Cabeça de atenção
+Definição: Cada instância independente do mecanismo de atenção dentro do módulo multi-head, operando sobre um subespaço do embedding.
+Função no modelo de linguagem: Cada cabeça aprende um aspecto diferente dos dados. A especialização é emergente, não programada.
+Relação com outros conceitos: Opera em head_dim dimensões. Suas saídas são concatenadas e depois misturadas pela out_proj.
+Exemplo conceitual: Observação dos experimentos da Sprint 3: com o modelo não treinado, as cabeças produzem padrões semelhantes — a arquitetura garante que elas possam divergir, mas é o treinamento que as faz divergir.
+
+head_dim
+Termo original: head_dim
+Tradução/equivalente: Dimensão por cabeça
+Definição: Número de dimensões atribuídas a cada cabeça, calculado como d_out dividido por num_heads.
+Função no modelo de linguagem: Define o tamanho do subespaço em que cada cabeça calcula similaridade. É também o d_k efetivo usado no escalonamento dentro da cabeça.
+Relação com outros conceitos: É o resultado do fatiamento de d_out. Aparece nas operações .view() e .transpose() que reorganizam os tensores.
+Exemplo conceitual: self.head_dim = d_out // self.num_heads — com d_out = 2 e num_heads = 2, head_dim = 1.
+
+Hidden state
+Termo original: Hidden state
+Tradução/equivalente: Estado oculto
+Definição: Vetor de tamanho fixo que a RNN carrega de um passo ao próximo, contendo tudo o que ela retém do que já leu.
+Função no modelo de linguagem: É o ponto exato de falha das RNNs em textos longos: toda a frase precisa caber em um único vetor antes de ser passada ao decoder, e a informação do início se perde.
+Relação com outros conceitos: O context vector do self-attention é a resposta a esse problema — em vez de um estado comprimido único, cada token recebe sua própria representação enriquecida.
+Exemplo conceitual: Com hidden state de 512 dimensões, uma frase de 3 palavras e outra de 300 são comprimidas no mesmo espaço de 512 números; a segunda perde muito mais informação.
+
+Information leakage
+Termo original: Information leakage
+Tradução/equivalente: Vazamento de informação
+Definição: Risco de que informação de tokens futuros influencie a previsão do token atual, invalidando a tarefa de previsão da próxima palavra.
+Função no modelo de linguagem: É a preocupação que justifica a máscara causal. O livro demonstra que, após mascarar e renormalizar, o vazamento não ocorre.
+Relação com outros conceitos: O argumento é matemático: renormalizar após mascarar equivale a ter calculado a softmax apenas sobre o subconjunto visível desde o início.
+Exemplo conceitual: Se o modelo pudesse ver o futuro, acertaria 100% no treino e falharia por completo na inferência, quando o futuro ainda não existe.
+
+Key (k)
+Termo original: Key (k)
+Tradução/equivalente: Chave
+Definição: Vetor obtido projetando cada token pela matriz Wk. Funciona como índice: é o que a query compara para medir afinidade.
+Função no modelo de linguagem: Determina o quanto cada token se oferece como relevante. Todos os tokens produzem keys, inclusive aquele que está servindo de query.
+Relação com outros conceitos: Combina-se com a query por dot product para gerar o attention score. Sua dimensão é o d_k que entra no escalonamento.
+Exemplo conceitual: keys = inputs @ W_key → keys.shape = torch.Size([6, 2]): seis tokens projetados em um espaço de duas dimensões.
+
+masked_fill
+Termo original: masked_fill / -torch.inf
+Tradução/equivalente: Preenchimento mascarado / menos infinito
+Definição: Operação que substitui as posições marcadas por um valor dado — aqui, menos infinito — nos attention scores ainda não normalizados.
+Função no modelo de linguagem: É o mecanismo eficiente de mascaramento: como e elevado a menos infinito tende a zero, a softmax atribui probabilidade nula a essas posições e as linhas já saem somando 1.
+Relação com outros conceitos: Torna a renormalization desnecessária. O sufixo underscore em masked_fill_ indica operação in-place, que evita cópias de memória.
+Exemplo conceitual: attn_scores.masked_fill_(mask_bool, -torch.inf) — depois da softmax, as posições futuras valem exatamente 0,0000.
+
+Matrix multiplication
+Termo original: Matrix multiplication
+Tradução/equivalente: Multiplicação de matrizes
+Definição: Operação que combina duas matrizes calculando os dot products entre as linhas da primeira e as colunas da segunda.
+Função no modelo de linguagem: Substitui os laços for aninhados no cálculo dos scores e dos context vectors. Não altera o resultado, mas é ordens de magnitude mais rápida em GPU.
+Relação com outros conceitos: É a forma vetorizada do dot product. Na seção 3.6 aparece na variante em batch, que processa todas as cabeças simultaneamente.
+Exemplo conceitual: attn_scores = inputs @ inputs.T produz a matriz 6 × 6 completa; o laço duplo equivalente exige 36 iterações em Python puro.
+
+Multi-head attention
+Termo original: Multi-head attention
+Tradução/equivalente: Atenção com múltiplas cabeças
+Definição: Execução de várias instâncias de causal attention em paralelo, cada uma com seu próprio conjunto de projeções, seguida da concatenação das saídas.
+Função no modelo de linguagem: Permite ao modelo representar simultaneamente tipos distintos de relação — sintática, semântica, posicional — sem que uma única cabeça tenha de comportar todas.
+Relação com outros conceitos: É a etapa final da construção do capítulo. Cada cabeça é uma causal attention completa, e a combinação passa pela out_proj.
+Exemplo conceitual: O menor GPT-2 usa 12 cabeças com embedding de 768 dimensões (64 por cabeça); o maior usa 25 cabeças com embedding de 1.600.
+
+MultiHeadAttentionWrapper
+Termo original: MultiHeadAttentionWrapper
+Tradução/equivalente: Invólucro de múltiplas cabeças
+Definição: Implementação didática que instancia várias CausalAttention em um nn.ModuleList e concatena suas saídas.
+Função no modelo de linguagem: Torna o conceito explícito e legível. É funcionalmente correta, porém processa as cabeças sequencialmente.
+Relação com outros conceitos: Equivalente em resultado à MultiHeadAttention, mas mais lenta. Aqui d_out é por cabeça, de modo que a saída tem d_out × num_heads dimensões.
+Exemplo conceitual: Com d_out = 2 e num_heads = 2, a saída tem quatro dimensões: context_vecs.shape = torch.Size([2, 6, 4]).
+
+nn.Linear
+Termo original: nn.Linear
+Tradução/equivalente: Camada linear
+Definição: Camada que aplica uma transformação linear. Com bias=False, é equivalente a uma multiplicação de matriz pura.
+Função no modelo de linguagem: É a forma recomendada de implementar Wq, Wk e Wv, porque traz um esquema de inicialização otimizado que torna o treinamento mais estável.
+Relação com outros conceitos: Base da SelfAttention_v2, da CausalAttention e da out_proj. Guarda a matriz transposta internamente — detalhe que o Exercício 3.1 explora.
+Exemplo conceitual: self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias) — a v1 e a v2 produzem saídas diferentes apenas por causa da inicialização.
+
+nn.Module
+Termo original: nn.Module
+Tradução/equivalente: Módulo do PyTorch
+Definição: Classe base do PyTorch para qualquer camada ou modelo. Fornece registro automático de parâmetros, movimentação entre dispositivos e o método forward().
+Função no modelo de linguagem: É o contêiner de toda implementação do capítulo: SelfAttention_v1, SelfAttention_v2, CausalAttention e MultiHeadAttention derivam dela.
+Relação com outros conceitos: Trabalha junto com nn.Parameter, nn.Linear e register_buffer, que são os mecanismos de registro de estado dentro do módulo.
+Exemplo conceitual: class CausalAttention(nn.Module): ... — a chamada super().__init__() no construtor é o que ativa esse registro automático.
+
+nn.Parameter
+Termo original: nn.Parameter
+Tradução/equivalente: Parâmetro registrado
+Definição: Envoltório que marca um tensor como parâmetro treinável, fazendo o PyTorch incluí-lo em model.parameters() e calcular gradientes para ele.
+Função no modelo de linguagem: Forma explícita de declarar Wq, Wk e Wv. Usada na SelfAttention_v1, de valor didático.
+Relação com outros conceitos: É a alternativa mais verbosa a nn.Linear. Ambas realizam a mesma multiplicação; diferem na inicialização dos valores.
+Exemplo conceitual: self.W_query = nn.Parameter(torch.rand(d_in, d_out)) — inicialização uniforme no intervalo [0, 1).
+
+Normalization
+Termo original: Normalization
+Tradução/equivalente: Normalização
+Definição: Etapa de reescalonar os attention scores para que somem 1 dentro de cada linha da matriz de atenção.
+Função no modelo de linguagem: Sem ela os pesos teriam escalas arbitrárias e o context vector cresceria ou encolheria de forma descontrolada ao longo das camadas.
+Relação com outros conceitos: É implementada pela softmax. A renormalization da seção 3.5 é uma segunda aplicação dela, necessária apenas na abordagem ingênua de mascaramento.
+Exemplo conceitual: Dividir [0,95; 1,50; 1,48] pela soma 3,93 resulta em [0,24; 0,38; 0,38]; a softmax faz o mesmo, mas exponenciando antes.
+
+num_heads
+Termo original: num_heads
+Tradução/equivalente: Número de cabeças
+Definição: Hiperparâmetro que define quantas cabeças de atenção o módulo executa em paralelo. Deve dividir d_out exatamente.
+Função no modelo de linguagem: Controla a granularidade da especialização. Mais cabeças significam subespaços menores, cada um com menos dimensões para trabalhar.
+Relação com outros conceitos: Relaciona-se a head_dim pela fórmula head_dim = d_out // num_heads. O assert no construtor garante a divisibilidade.
+Exemplo conceitual: assert d_out % num_heads == 0 — com d_out = 768 e num_heads = 12, cada cabeça recebe 64 dimensões.
+
+out_proj
+Termo original: out_proj (output projection)
+Tradução/equivalente: Projeção de saída
+Definição: Camada linear aplicada ao resultado depois que as saídas das cabeças foram concatenadas.
+Função no modelo de linguagem: Mistura a informação das diferentes cabeças. Sem ela, as cabeças permaneceriam em subespaços estanques até a camada seguinte.
+Relação com outros conceitos: Não é estritamente necessária — a CausalAttention não a possui — mas é padrão na maioria das arquiteturas de LLM.
+Exemplo conceitual: self.out_proj = nn.Linear(d_out, d_out); context_vec = self.out_proj(context_vec)
+
+Overfitting
+Termo original: Overfitting
+Tradução/equivalente: Sobreajuste
+Definição: Situação em que o modelo memoriza padrões específicos do conjunto de treino em vez de aprender regularidades que generalizam.
+Função no modelo de linguagem: É o problema que o dropout mitiga. Em LLMs, manifesta-se como reprodução literal de trechos do corpus em vez de geração genuína.
+Relação com outros conceitos: É combatido pelo dropout e, em escala maior, pelo volume de dados de pré-treinamento.
+Exemplo conceitual: Um modelo sobreajustado atinge perda baixíssima no treino e perda alta em texto novo; a distância entre as duas curvas é o diagnóstico.
+
+Query (q)
+Termo original: Query (q)
+Tradução/equivalente: Consulta
+Definição: Vetor obtido projetando o token atual pela matriz Wq. Representa o que esse token está buscando no restante da sequência.
+Função no modelo de linguagem: Define o ponto de vista do cálculo: os attention weights de uma linha são sempre relativos a uma query específica.
+Relação com outros conceitos: Forma par com key (comparação) e value (conteúdo). A analogia do livro é a de banco de dados: a query é o termo de busca.
+Exemplo conceitual: query_2 = x_2 @ W_query — com d_in = 3 e d_out = 2, o vetor de três dimensões resulta em tensor([0.4306, 1.4551]).
+
+register_buffer
+Termo original: register_buffer
+Tradução/equivalente: Registro de buffer
+Definição: Método do nn.Module que registra um tensor como estado do módulo sem torná-lo parâmetro treinável.
+Função no modelo de linguagem: Usado para a máscara causal: garante que ela acompanhe o modelo ao ser movido para a GPU, evitando erros de incompatibilidade de dispositivo.
+Relação com outros conceitos: Complementa nn.Parameter — ambos registram estado, mas só o parâmetro recebe gradiente. Buffers entram no state_dict, mas não no otimizador.
+Exemplo conceitual: self.register_buffer("mask", torch.triu(torch.ones(cl, cl), diagonal=1)) — sem isso seria preciso chamar .to(device) na máscara manualmente.
+
+Renormalization
+Termo original: Renormalization
+Tradução/equivalente: Renormalização
+Definição: Divisão de cada linha da matriz de pesos pela sua própria soma, para que volte a somar 1 após o zeramento das posições futuras.
+Função no modelo de linguagem: Passo corretivo exclusivo da abordagem ingênua de mascaramento. É a razão pela qual o livro prefere a abordagem com menos infinito, que o elimina.
+Relação com outros conceitos: É consequência direta de mascarar depois da softmax; mascarar antes torna o passo redundante.
+Exemplo conceitual: row_sums = masked.sum(dim=-1, keepdim=True); masked_norm = masked / row_sums — duas operações que a máscara com menos infinito dispensa.
+
+RNN
+Termo original: RNN (Recurrent Neural Network)
+Tradução/equivalente: Rede neural recorrente
+Definição: Arquitetura que processa a sequência token a token, mantendo um estado interno que é atualizado a cada passo e repassado ao passo seguinte.
+Função no modelo de linguagem: Foi a arquitetura dominante em processamento de linguagem natural antes do transformer. No Capítulo 3 aparece apenas como contraexemplo, para justificar por que a atenção foi necessária.
+Relação com outros conceitos: Opõe-se ao transformer, que processa todos os tokens em paralelo. O hidden state é seu mecanismo de memória, e a Bahdanau attention foi a primeira tentativa de corrigi-lo.
+Exemplo conceitual: Para traduzir uma frase de 40 palavras, a RNN executa 40 passos sequenciais; o self-attention calcula as 1.600 relações de uma só vez, em uma multiplicação de matrizes.
+
+Scaled dot-product attention
+Termo original: Scaled dot-product attention
+Tradução/equivalente: Atenção por produto escalar escalonado
+Definição: Formulação completa do self-attention usada no transformer original e nos modelos GPT: softmax do produto de Q por K transposto, dividido por √d_k, multiplicado por V.
+Função no modelo de linguagem: É a versão que efetivamente aprende. As três projeções treináveis permitem ao modelo ajustar o que conta como relevante para a tarefa.
+Relação com outros conceitos: Estende o self-attention simplificado com Wq, Wk, Wv e o fator √d_k. Recebe a máscara na seção 3.5 e é replicada em paralelo na seção 3.6.
+Exemplo conceitual: attn_weights = torch.softmax(queries @ keys.T / keys.shape[-1]**0.5, dim=-1)
+
+Scaling by √d_k
+Termo original: Scaling by √d_k
+Tradução/equivalente: Escalonamento pela raiz de d_k
+Definição: Divisão dos attention scores pela raiz quadrada da dimensão dos keys, aplicada antes da softmax.
+Função no modelo de linguagem: Evita que a softmax sature. Com dot products grandes, ela passa a se comportar como função degrau, os gradientes tendem a zero e o treinamento estagna.
+Relação com outros conceitos: É a diferença entre dot-product attention e scaled dot-product attention. Atua sobre o attention score e condiciona a qualidade do backpropagation.
+Exemplo conceitual: Medição dos experimentos da Sprint 3, com d_k = 512 e seis tokens: entropia dos pesos entre 2,0 e 2,3 bits com escala, contra 0,21 bit sem escala (máximo teórico: 2,585 bits).
+
+Single-head attention
+Termo original: Single-head attention
+Tradução/equivalente: Atenção de cabeça única
+Definição: Um único módulo de atenção, com um só conjunto de pesos e uma só matriz de attention weights.
+Função no modelo de linguagem: É o caso particular de multi-head com num_heads igual a 1. Serve de unidade de construção e de referência de comparação.
+Relação com outros conceitos: A classe CausalAttention é exatamente isso; o multi-head é obtido empilhando-a ou fatiando internamente suas projeções.
+Exemplo conceitual: Uma cabeça só precisa escolher um único padrão de relevância por token; com 12 cabeças, cada uma pode se especializar em um aspecto.
+
+Softmax
+Termo original: Softmax
+Tradução/equivalente: Função softmax
+Definição: Função que transforma um vetor de números reais em uma distribuição de probabilidade: exponencia cada valor e divide pela soma das exponenciais.
+Função no modelo de linguagem: Normaliza os attention scores. Garante pesos positivos que somam 1, o que estabiliza o treinamento e torna os pesos interpretáveis como proporções.
+Relação com outros conceitos: Converte ω em α. Sua saturação em valores grandes é o motivo do escalonamento por √d_k, e sua propriedade de anular o menos infinito é o que faz a máscara causal funcionar.
+Exemplo conceitual: torch.softmax(attn_scores, dim=-1) — o parâmetro dim=-1 aplica a normalização à última dimensão, de modo que cada linha da matriz some 1.
+
+torch.tril
+Termo original: torch.tril
+Tradução/equivalente: Triangular inferior
+Definição: Função que zera todos os elementos acima da diagonal principal, preservando a parte triangular inferior da matriz.
+Função no modelo de linguagem: Usada na primeira abordagem, didática, de mascaramento: multiplica-se a matriz de pesos já normalizada por essa máscara de zeros e uns.
+Relação com outros conceitos: Essa abordagem exige renormalization depois, porque zerar valores quebra a soma 1. A abordagem com torch.triu e menos infinito dispensa esse passo.
+Exemplo conceitual: mask_simple = torch.tril(torch.ones(context_length, context_length)); masked = attn_weights * mask_simple
+
+torch.triu
+Termo original: torch.triu
+Tradução/equivalente: Triangular superior
+Definição: Função que preserva a parte triangular superior de uma matriz. Com diagonal=1, marca exatamente as posições estritamente futuras.
+Função no modelo de linguagem: Usada na abordagem eficiente: as posições marcadas recebem menos infinito nos attention scores, antes da softmax.
+Relação com outros conceitos: Forma par com masked_fill. É a versão adotada nas classes CausalAttention e MultiHeadAttention do livro.
+Exemplo conceitual: mask = torch.triu(torch.ones(context_length, context_length), diagonal=1) — diagonal=1 exclui a própria diagonal, que deve permanecer visível.
+
+Trainable weight matrices (Wq, Wk, Wv)
+Termo original: Trainable weight matrices
+Tradução/equivalente: Matrizes de pesos treináveis
+Definição: Três matrizes de dimensão d_in por d_out, inicializadas aleatoriamente e ajustadas por backpropagation durante o treinamento.
+Função no modelo de linguagem: São os parâmetros que o modelo de fato aprende no módulo de atenção. Definem o espaço em que a similaridade entre tokens é medida.
+Relação com outros conceitos: Produzem Q, K e V a partir de X. São weight parameters, não attention weights. No multi-head são fatiadas entre as cabeças, não replicadas.
+Exemplo conceitual: W_query = nn.Linear(d_in, d_out, bias=False) — com d_in = 768 e d_out = 768 no GPT-2, cada matriz possui 589.824 parâmetros.
+
+Value (v)
+Termo original: Value (v)
+Tradução/equivalente: Valor
+Definição: Vetor obtido projetando cada token pela matriz Wv. Carrega o conteúdo efetivo que será agregado no context vector.
+Função no modelo de linguagem: Separa o quanto olhar, decidido por query e key, do que é recuperado, que é o value. Essa separação dá ao modelo liberdade para aprender relevância e conteúdo de forma independente.
+Relação com outros conceitos: É a última etapa: context_vec = attn_weights @ values. Na causal attention e no multi-head, os values seguem o mesmo caminho; muda apenas quais pesos os alcançam.
+Exemplo conceitual: values = inputs @ W_value; context_vec_2 = attn_weights_2 @ values = tensor([0.3061, 0.8210])
+
+.view() / .transpose()
+Termo original: .view() / .transpose()
+Tradução/equivalente: Redimensionar / transpor
+Definição: O método .view() reorganiza a forma do tensor sem copiar dados; o método .transpose() troca duas dimensões de posição.
+Função no modelo de linguagem: São as operações que implementam o fatiamento entre cabeças. Juntas, convertem a forma (b, num_tokens, d_out) em (b, num_heads, num_tokens, head_dim).
+Relação com outros conceitos: A transposição é necessária para alinhar as cabeças antes da multiplicação em batch. Depois do cálculo, o caminho inverso é percorrido, com .contiguous() antes do .view() final.
+Exemplo conceitual: keys = keys.view(b, num_tokens, self.num_heads, self.head_dim).transpose(1, 2)
+
+Weight parameters vs. attention weights
+Termo original: Weight parameters vs. attention weights
+Tradução/equivalente: Parâmetros de peso vs. pesos de atenção
+Definição: Weight parameters são os coeficientes aprendidos que definem as conexões da rede (Wq, Wk, Wv); attention weights são valores recalculados a cada entrada.
+Função no modelo de linguagem: Distinguir os dois é essencial para entender o que é memória do modelo — os parâmetros, fixos após o treino — e o que é cômputo do momento — os pesos, específicos da frase.
+Relação com outros conceitos: Os weight parameters geram Q, K e V, que por sua vez geram os attention weights. Apenas os primeiros recebem gradiente e são salvos no checkpoint.
+Exemplo conceitual: Ao carregar um GPT-2 treinado, carregam-se as matrizes Wq, Wk e Wv. Os valores de α são calculados do zero para cada prompt escrito.
+
+Weight splits
+Termo original: Weight splits
+Tradução/equivalente: Divisão dos pesos
+Definição: Estratégia de usar uma única matriz de pesos grande e fatiar seu resultado entre as cabeças, em vez de criar uma matriz por cabeça.
+Função no modelo de linguagem: Reduz o número de multiplicações de matriz de num_heads para uma, mantendo a matemática idêntica. É o que torna a MultiHeadAttention eficiente.
+Relação com outros conceitos: Tem uma consequência importante: o número de cabeças não altera o total de parâmetros, pois d_out é fatiado, e não multiplicado.
+Exemplo conceitual: Confirmado nos experimentos da Sprint 3: com d_out fixo, 1, 2, 4 ou 8 cabeças produzem exatamente a mesma contagem de parâmetros.
+
+Weighted sum
+Termo original: Weighted sum
+Tradução/equivalente: Soma ponderada
+Definição: Soma de vários vetores em que cada um é multiplicado por um coeficiente antes de ser somado.
+Função no modelo de linguagem: É a operação final do self-attention: o context vector é a soma ponderada dos vetores de entrada, ou dos values, usando os attention weights como coeficientes.
+Relação com outros conceitos: Consome os attention weights e produz o context vector. Em forma matricial, corresponde exatamente a attn_weights @ values.
+Exemplo conceitual: z⁽²⁾ = 0,1385·x⁽¹⁾ + 0,2379·x⁽²⁾ + 0,2333·x⁽³⁾ + 0,1240·x⁽⁴⁾ + 0,1082·x⁽⁵⁾ + 0,1581·x⁽⁶⁾
