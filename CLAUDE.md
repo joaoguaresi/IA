@@ -8,7 +8,7 @@ Este é o repositório do Projeto Integrador de Inteligência Artificial e Siste
 
 Em vez de usar modelos prontos, cada conceito do livro é implementado manualmente: das leituras iniciais até a arquitetura Transformer completa, o treinamento do modelo, a geração de texto e o fine-tuning final. O projeto começou em 30/07/2026 e a entrega final é em 03/12/2026.
 
-O projeto está na **Sprint 3** (mecanismos de atenção do Capítulo 3: self-attention, scaled dot-product, causal e multi-head — ver `Sprints.txt`). O código é **incremental**: cada sprint soma componentes aos já implementados em `src/`, formando o pipeline completo do LLM ao final do semestre. As sprints anteriores (0-1: ambiente + Capítulo 1; 2: tokenização, vocabulário, embeddings e positional embeddings) já estão implementadas em `src/`.
+O projeto está na **Sprint 3** (mecanismos de atenção do Capítulo 3: self-attention, scaled dot-product, causal e multi-head — ver `Sprints.txt`), já com código, glossário e relatório entregues. O código é **incremental**: cada sprint soma componentes aos já implementados em `src/`, formando o pipeline completo do LLM ao final do semestre. As sprints anteriores (0-1: ambiente + Capítulo 1; 2: tokenização, vocabulário, embeddings e positional embeddings) já estão implementadas em `src/`. A Sprint 4 (Transformer Block, arquitetura GPT completa e geração de texto) já está especificada em `Sprints.txt`, mas ainda sem implementação em `src/`.
 
 ## Fluxo de trabalho (ciclo por capítulo)
 
@@ -91,7 +91,7 @@ Texto
 - `tests/` — testes `unittest` (compatíveis com `pytest`) para os módulos de `src/`.
 - `data/` — corpus de treinamento (`amostra.txt`, atualmente o único presente; `src/dados.py` usa `data/the-verdict.txt` em seu lugar automaticamente se ele for baixado).
 - `glossaries/` — glossários técnicos cumulativos, um por integrante (`Glossary - João.md`, `Glossary - Laura`). Cada nova sprint acrescenta uma seção `# Glossário — Capítulo N`. Cada termo segue o formato: termo original, tradução, definição, função no modelo, relação com outros conceitos, exemplo.
-- `documents/` — relatórios por capítulo (ex.: `Capítulo 2 - Relatório da Sprint 2.docx` com a análise dos resultados exigida pela Sprint).
+- `documents/` — relatórios por capítulo (ex.: `Capítulo 2 - Relatório da Sprint 2.docx`, `Capítulo 3 - Relatório da Sprint 3.docx`), com a análise dos resultados exigida por cada Sprint.
 - `Livro - Build a Large Language Model.pdf` — referência principal do projeto.
 - `Projeto Final.pdf` — enunciado/critérios de avaliação do projeto integrador.
 - `Sprints.txt` — especificação de cada sprint (objetivos, atividades e entregáveis).
