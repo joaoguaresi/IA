@@ -747,3 +747,187 @@
 - **Exemplo conceitual:** A mesma matriz `W_query` (parâmetro fixo) gera pesos de atenção diferentes para "journey" e para "step", pois os pesos de atenção dependem do token de consulta específico, não apenas da matriz.
 
 ---
+
+# Glossário — Capítulo 4: Implementing a GPT Model from Scratch to Generate Text
+
+---
+
+### 1. DummyGPTModel (Arquitetura Placeholder)
+- **Tradução:** Modelo GPT provisório / placeholder
+- **Definição:** Esqueleto inicial da arquitetura GPT, em que o Transformer Block e o LayerNorm são substituídos por classes "vazias" (`DummyTransformerBlock` devolve a entrada sem alterá-la; `DummyLayerNorm` idem), só para fixar o formato de entrada e saída do modelo antes de implementar cada peça de verdade.
+- **Funcionalidade:** Permite rodar um forward completo (Token IDs → logits) e conferir as formas dos tensores em cada etapa, mesmo sem nenhum componente interno funcional — uma estratégia de desenvolvimento incremental "de fora para dentro".
+- **Relação com outros conceitos:** É substituído, passo a passo, pelos componentes reais do capítulo (LayerNorm, GELU, FeedForward, Shortcut Connections, Transformer Block), até virar o `GPTModel` funcional da seção 4.6.
+- **Exemplo conceitual:** Com o `GPT_CONFIG_124M`, o `DummyGPTModel` já devolve logits de forma `(2, 4, 50257)` para um lote de 2 textos com 4 tokens — a forma certa, mesmo com os blocos internos sem fazer nada de útil ainda.
+
+---
+
+### 2. Layer Normalization (LayerNorm)
+- **Tradução:** Normalização de camada
+- **Definição:** Técnica que reescala as ativações de uma camada, ao longo da última dimensão (`emb_dim`), para terem média 0 e variância 1, seguida de uma escala (`scale`) e um deslocamento (`shift`) aprendidos.
+- **Funcionalidade:** Estabiliza e acelera o treinamento, evitando que as ativações cresçam ou encolham demais à medida que atravessam muitas camadas — um dos problemas centrais no treino de redes profundas como os LLMs.
+- **Relação com outros conceitos:** Diferente do Batch Normalization (que normaliza entre as amostras de um lote), o LayerNorm normaliza cada token independentemente, o que o torna adequado a lotes de tamanho variável; é aplicado antes da atenção e antes da FeedForward em cada Transformer Block (Pre-LayerNorm), e mais uma vez ao final de toda a pilha de blocos.
+- **Exemplo conceitual:** Em `src/transformer.py`, `LayerNorm(emb_dim)` usa `unbiased=False` no cálculo da variância (divide por n, não por n−1) — a mesma convenção do TensorFlow usada no GPT-2 original, necessária para compatibilidade com pesos pré-treinados.
+
+---
+
+### 3. Vanishing Gradient Problem (Problema do Gradiente Desaparecendo)
+- **Tradução:** Problema do gradiente que desaparece
+- **Definição:** Fenômeno em que os gradientes ficam progressivamente menores à medida que se propagam para trás através das camadas durante a retropropagação, dificultando o ajuste dos pesos das camadas mais iniciais da rede.
+- **Funcionalidade (por que importa):** Em redes profundas sem nenhum mecanismo de correção, as primeiras camadas praticamente param de aprender, pois o sinal de erro que chega a elas é quase nulo.
+- **Relação com outros conceitos:** É o problema que motiva as conexões residuais (shortcut connections); o livro demonstra isso numericamente com uma rede de 5 camadas, comparando o gradiente médio de cada camada com e sem shortcuts.
+- **Exemplo conceitual:** Sem shortcuts, o gradiente médio da primeira camada (`layers.0`) cai para 0,0002, quase 15 mil vezes menor que o da última camada (3,25); com shortcuts, a primeira camada mantém gradiente de 0,22 — a mesma ordem de grandeza da última.
+
+---
+
+### 4. GELU (Gaussian Error Linear Unit)
+- **Tradução:** Unidade linear de erro gaussiano
+- **Definição:** Função de ativação suave usada pelos modelos GPT no lugar da ReLU, definida (na versão exata) como `GELU(x) = x · Φ(x)`, onde `Φ` é a função de distribuição acumulada da gaussiana padrão; na prática, usa-se uma aproximação por `tanh`, mais barata de calcular.
+- **Funcionalidade:** Ao contrário da ReLU, que zera abruptamente tudo que é negativo (derivada zero permanente, o problema dos "neurônios mortos"), a GELU deixa passar uma fração pequena, mas não nula, dos valores negativos, numa transição suave — o que favorece a otimização em redes profundas.
+- **Relação com outros conceitos:** É a ativação usada dentro da `FeedForward`, entre as duas camadas lineares; o GPT-2 original foi treinado com exatamente essa aproximação por `tanh`, por isso o livro (e `src/transformer.py`) a reproduz em vez de usar a GELU exata.
+- **Exemplo conceitual:** No `exp13`, `GELU(-1.0) ≈ -0,159` enquanto `ReLU(-1.0) = 0` — a GELU "deixa vazar" parte do sinal negativo; para `x=3.0`, as duas já ficam praticamente iguais (2,996 vs. 3,000).
+
+---
+
+### 5. FeedForward Network (Rede Feed-Forward)
+- **Tradução:** Rede de alimentação direta (posição a posição)
+- **Definição:** Pequena rede de duas camadas lineares com uma GELU no meio, aplicada independentemente a cada posição (token) da sequência: `emb_dim → 4×emb_dim → GELU → emb_dim`.
+- **Funcionalidade:** Enquanto a atenção mistura informação ENTRE tokens, a FeedForward processa cada token individualmente, dando à rede "espaço" extra (a expansão de 4x) para recombinar, token a token, a informação que a atenção trouxe de outras posições.
+- **Relação com outros conceitos:** É a segunda das duas sub-camadas de um Transformer Block (a primeira é a Multi-Head Attention); a uniformidade entre a forma de entrada e saída é o que permite empilhar blocos sem ajustes de dimensão.
+- **Exemplo conceitual:** Para `emb_dim=768` (GPT-2 small), a primeira camada linear projeta para 3.072 dimensões e a segunda projeta de volta para 768 — no `exp13`, com `emb_dim=8`, isso vira 8 → 32 → 8, com 552 parâmetros no total.
+
+---
+
+### 6. Shortcut Connections (Conexões Residuais)
+- **Tradução:** Conexões de atalho / conexões residuais
+- **Definição:** Conexões que somam a entrada de uma camada (ou sub-bloco) diretamente à sua saída, criando um "atalho" por onde o gradiente pode fluir sem precisar atravessar as transformações internas daquela camada.
+- **Funcionalidade:** Mitigam o problema do gradiente desaparecendo em redes profundas, garantindo que mesmo camadas muito distantes da saída recebam um sinal de erro significativo durante o treino.
+- **Relação com outros conceitos:** Usadas duas vezes em cada Transformer Block — ao redor da atenção e ao redor da FeedForward; originalmente propostas para redes residuais de visão computacional, hoje são um componente padrão de LLMs.
+- **Exemplo conceitual:** No `exp13` (13.5), zerando todos os pesos da atenção, da FeedForward e do `scale` do LayerNorm dentro de um `TransformerBlock`, a saída continua sendo exatamente igual à entrada — prova de que o atalho, sozinho, já garante a passagem do sinal mesmo quando as sub-camadas "não fazem nada".
+
+---
+
+### 7. Transformer Block
+- **Tradução:** Bloco Transformer
+- **Definição:** Unidade reutilizável que integra Multi-Head Attention, Layer Normalization, FeedForward e conexões residuais: `x → LayerNorm → Atenção → dropout → +x`, seguido de `→ LayerNorm → FeedForward → dropout → +resultado`.
+- **Funcionalidade:** É o "tijolo" que se repete N vezes para formar a arquitetura GPT; entrada e saída têm sempre a mesma forma `(batch, tokens, emb_dim)`, o que permite empilhar quantos blocos forem necessários sem nenhum ajuste de dimensão entre eles.
+- **Relação com outros conceitos:** Repetido 12 vezes no GPT-2 small (124M), 24 no medium, 36 no large e 48 no XL; implementado em `TransformerBlock` (`src/transformer.py`), que também repassa `ultimo_attn_weights` da sua `MultiHeadAttention` interna, no mesmo contrato da Sprint 3.
+- **Exemplo conceitual:** `exp13` instancia um bloco com `emb_dim=8`, `num_heads=2` e mede 848 parâmetros totais: 264 na atenção, 552 na FeedForward e 32 nos dois LayerNorms.
+
+---
+
+### 8. Pre-LayerNorm vs. Post-LayerNorm
+- **Tradução:** Normalização antes vs. depois da sub-camada
+- **Definição:** Duas formas de posicionar o LayerNorm em relação à atenção/FeedForward: Pre-LayerNorm normaliza a entrada ANTES de passá-la pela sub-camada (`x → norm → atenção → +x`); Post-LayerNorm normaliza DEPOIS (`x → atenção → norm → +x`), como no Transformer original de 2017.
+- **Funcionalidade:** O Pre-LayerNorm, adotado pelo GPT-2 e pelos LLMs modernos, produz uma dinâmica de treino mais estável que o Post-LayerNorm, especialmente em redes muito profundas.
+- **Relação com outros conceitos:** É a convenção seguida por `TransformerBlock`, tanto no livro quanto em `src/transformer.py`: o `LayerNorm` sempre vem antes da `MultiHeadAttention`/`FeedForward`, nunca depois.
+- **Exemplo conceitual:** `self.norm1(x)` é chamado antes de `self.atencao(x)` em `TransformerBlock.forward` — se a ordem fosse invertida (atenção primeiro, norm depois), seria Post-LayerNorm.
+
+---
+
+### 9. GPTModel (Arquitetura GPT Completa)
+- **Tradução:** Modelo GPT
+- **Definição:** Arquitetura completa que encadeia `GPTEmbedding` (token + positional embeddings) → dropout → N × `TransformerBlock` → LayerNorm final → `out_head` (camada linear sem viés), convertendo Token IDs em logits sobre o vocabulário.
+- **Funcionalidade:** É o modelo que efetivamente aprende a prever o próximo token; todos os componentes dos capítulos 2 a 4 (tokenização, embeddings, atenção, normalização, FeedForward, shortcuts) se encontram aqui pela primeira vez em uma única classe.
+- **Relação com outros conceitos:** Implementado em `GPTModel` (`src/transformer.py`); os valores padrão da classe reproduzem o `GPT_CONFIG_124M` do livro (768 dimensões, 12 cabeças, 12 camadas).
+- **Exemplo conceitual:** `exp14` confirma que `modelo.forward(idx)` produz exatamente os mesmos logits que passar manualmente por `embeddings → cada bloco → norm_final → out_head` — a classe só organiza essas etapas, sem nenhuma lógica escondida.
+
+---
+
+### 10. Weight Tying (Amarração de Pesos)
+- **Tradução:** Amarração (compartilhamento) de pesos
+- **Definição:** Técnica em que a matriz de token embeddings (`tok_emb`, forma `vocab_size × emb_dim`) e a matriz da camada de saída (`out_head`, também `vocab_size × emb_dim`) são a MESMA matriz, reaproveitada nas duas pontas do modelo.
+- **Funcionalidade:** Reduz a memória e o número de parâmetros do modelo, já que essas duas matrizes são, de longe, as maiores da arquitetura quando o vocabulário é grande (50.257 no GPT-2).
+- **Relação com outros conceitos:** É exatamente a diferença entre os "124M" anunciados originalmente para o GPT-2 small e os 163M parâmetros reais de uma implementação sem tying, como a do livro e a deste projeto (que usa camadas separadas, por produzir, segundo o autor, melhores resultados de treino).
+- **Exemplo conceitual:** `exp14` (14.5) calcula exatamente essa diferença: 163.009.536 parâmetros sem tying, menos 38.597.376 (o tamanho de `tok_emb`, igual ao de `out_head`), resultando em 124.412.160 — batendo com os números do livro.
+
+---
+
+### 11. GPT_CONFIG_124M (Dicionário de Configuração)
+- **Tradução:** Configuração do GPT-2 small
+- **Definição:** No livro, um dicionário Python que reúne os hiperparâmetros estruturais do menor modelo GPT-2: `vocab_size=50257`, `context_length=1024`, `emb_dim=768`, `n_heads=12`, `n_layers=12`, `drop_rate=0.1`, `qkv_bias=False`.
+- **Funcionalidade:** Centraliza, em um único lugar, tudo que define o "tamanho" e a "forma" do modelo — o mesmo `GPTModel`/classe serve para qualquer uma das quatro variantes oficiais do GPT-2, bastando trocar esses valores.
+- **Relação com outros conceitos:** Em `src/transformer.py`, os parâmetros equivalentes viraram argumentos nomeados do construtor de `GPTModel` (com os mesmos valores como padrão), em vez de um dicionário — mas o papel é idêntico.
+- **Exemplo conceitual:** `exp14` (14.4) usa as quatro configurações oficiais (small/medium/large/XL) só variando `emb_dim`, `n_layers` e `n_heads`, confirmando que a mesma classe escala de 163M a mais de 1,6 bilhão de parâmetros.
+
+---
+
+### 12. Logits
+- **Tradução:** Logits (mantido em inglês)
+- **Definição:** Saída bruta e não normalizada da última camada do modelo (`out_head`), de forma `(batch, tokens, vocab_size)` — um vetor de 50.257 números reais por token, um por palavra possível do vocabulário.
+- **Funcionalidade:** Só a posição de maior valor já indica, sozinha, qual token o modelo prefere (já que o softmax é monotônico); os logits precisam passar por softmax para virarem uma distribuição de probabilidade válida (soma 1, todos ≥ 0).
+- **Relação com outros conceitos:** É a ponte entre o `GPTModel` (que produz logits) e `src/geracao.py` (que os transforma em texto); só a última posição da sequência interessa para prever o próximo token.
+- **Exemplo conceitual:** No `exp16` (16.3), `logits[:, -1, :]` tem forma `(1, vocab_size)`; aplicando softmax, a maior probabilidade e a posição do `argmax` são idênticas antes e depois da normalização.
+
+---
+
+### 13. Language Model Head (`out_head`)
+- **Tradução:** Cabeça de modelo de linguagem
+- **Definição:** Camada linear final do `GPTModel` (`nn.Linear(emb_dim, vocab_size, bias=False)`) que projeta a representação de cada token, após o LayerNorm final, para o espaço do vocabulário.
+- **Funcionalidade:** É a camada que converte "entendimento contextual" (um vetor de `emb_dim` dimensões) em uma "opinião sobre qual é o próximo token" (um vetor de `vocab_size` dimensões) — sem viés, seguindo a convenção do GPT-2.
+- **Relação com outros conceitos:** Tem a mesma forma da matriz de token embeddings (`vocab_size × emb_dim`), o que torna o weight tying possível; domina, junto com `tok_emb`, o total de parâmetros em modelos com vocabulário grande e poucas camadas.
+- **Exemplo conceitual:** `parametros_por_componente` (`src/transformer.py`) reporta, para um `GPTModel` pequeno de teste, que `out_head` e `token_embeddings` têm exatamente o mesmo número de parâmetros (800, no `exp14`) — prova direta de que as formas são iguais.
+
+---
+
+### 14. Geração Autorregressiva (generate / `gerar`)
+- **Tradução:** Geração autorregressiva de texto
+- **Definição:** Processo iterativo em que o modelo prevê um token por vez, acrescenta o token escolhido ao final do contexto e repete, usando a sequência (agora maior) como entrada da próxima rodada.
+- **Funcionalidade:** É assim que um LLM "escreve": nunca produz a frase inteira de uma vez, mas token a token, cada novo token condicionado em tudo o que já foi gerado — o mesmo princípio da máscara causal da Sprint 3, agora aplicado à inferência.
+- **Relação com outros conceitos:** Implementado em `gerar` (`src/geracao.py`), que generaliza o `generate_text_simple` do livro (o livro só cobre greedy; `gerar` acrescenta temperatura e top-k); a cada passo, só os logits da ÚLTIMA posição são usados.
+- **Exemplo conceitual:** `exp16` (16.1) mostra, passo a passo, o contexto crescendo a cada iteração — começando em `[50, 1807, ...]` (prompt) e ganhando um Token ID novo por rodada, até completar `max_novos_tokens`.
+
+---
+
+### 15. Context Size Cropping (Recorte do Contexto)
+- **Tradução:** Recorte do tamanho de contexto
+- **Definição:** Etapa do laço de geração em que a sequência acumulada é recortada para os últimos `context_size` tokens (`idx[:, -context_size:]`) antes de ser enviada ao modelo.
+- **Funcionalidade:** Garante que o modelo nunca receba mais tokens do que sua janela de contexto suporta — a cada novo token gerado, a sequência cresce, mas o que é efetivamente "visto" pelo modelo permanece limitado a `context_size`.
+- **Relação com outros conceitos:** É necessário porque a camada de positional embeddings (Sprint 2) só tem vetores para `context_length` posições; sem o recorte, uma geração longa o suficiente provocaria um erro de índice fora do intervalo.
+- **Exemplo conceitual:** `exp16` (16.7) usa `context_size=8` com um prompt de mais de 8 tokens — a sequência total cresce a cada rodada, mas o modelo sempre recebe só os últimos 8 tokens como entrada.
+
+---
+
+### 16. Dropout nas Múltiplas Camadas do GPT
+- **Tradução:** Dropout distribuído pela arquitetura
+- **Definição:** No `GPTModel`, o dropout aparece em três lugares distintos: logo após somar token e positional embeddings (`drop_emb`), depois da atenção dentro de cada bloco e depois da FeedForward dentro de cada bloco (`drop_shortcut`).
+- **Funcionalidade:** Cada ponto de dropout reduz o overfitting de uma parte diferente do modelo: nos embeddings, na mistura de informação entre tokens (atenção) e na transformação individual de cada token (FeedForward).
+- **Relação com outros conceitos:** Generaliza o dropout já visto na `CausalAttention`/`MultiHeadAttention` da Sprint 3 (que cobria só os pesos de atenção) para o modelo inteiro; todos usam a mesma taxa (`drop_rate`) por simplicidade, embora o livro proponha, como exercício, usar taxas diferentes em cada ponto.
+- **Exemplo conceitual:** `exp13` (13.7) mede a variância da saída de um `TransformerBlock` entre chamadas repetidas em modo de treino: 0 com `drop_rate=0%`, crescendo para 0,238 com `drop_rate=50%` — prova de que o dropout torna a saída estocástica apenas durante o treino.
+
+---
+
+### 17. Temperatura (Sampling)
+- **Tradução:** Temperatura de amostragem
+- **Definição:** Fator que divide os logits antes do softmax (`logits / temperatura`); valores menores que 1 tornam a distribuição mais "afiada" (mais parecida com greedy), valores maiores que 1 a achatam, dando mais chance a tokens menos prováveis.
+- **Funcionalidade:** Controla a aleatoriedade da geração sem mudar a ORDEM de preferência do modelo entre os candidatos — só a distância relativa entre eles antes de sortear.
+- **Relação com outros conceitos:** Implementada em `aplicar_temperatura` (`src/geracao.py`); combinada com `torch.multinomial` (sorteio proporcional às probabilidades) em vez de `argmax` (que ignoraria completamente a temperatura).
+- **Exemplo conceitual:** `exp17` mede a entropia da distribuição do próximo token para temperaturas diferentes, mostrando que a entropia cresce com a temperatura — mais tokens "no páreo", maior a incerteza da escolha.
+
+---
+
+### 18. Top-k Sampling
+- **Tradução:** Amostragem pelos k maiores
+- **Definição:** Técnica que mantém apenas os `k` tokens com maior logit, atribuindo `-infinito` a todos os demais antes do softmax — eliminando, assim, candidatos muito improváveis do sorteio.
+- **Funcionalidade:** Evita que a amostragem, especialmente com temperatura alta, escolha por azar um token muito improvável e descarrile a coerência do texto gerado.
+- **Relação com outros conceitos:** Implementado em `aplicar_top_k` (`src/geracao.py`); aplicado ANTES da temperatura em `distribuicao_do_proximo_token` — cortar primeiro e só depois reescalar, nunca o contrário, para que o corte reflita a distribuição original do modelo.
+- **Exemplo conceitual:** Com `top_k=5`, apenas os 5 tokens mais prováveis de cada passo concorrem entre si; no `exp16` (16.2), os "cinco candidatos de cada passo" são exatamente essa vizinhança — o mesmo grupo que o top-k manteria.
+
+---
+
+### 19. Greedy Decoding (Decodificação Gulosa)
+- **Tradução:** Decodificação gulosa
+- **Definição:** Estratégia de geração em que, a cada passo, o token escolhido é sempre o de maior probabilidade (`argmax` dos logits) — sem nenhum sorteio envolvido.
+- **Funcionalidade:** É determinística: a mesma entrada, com o mesmo modelo, produz sempre exatamente a mesma saída — útil para depuração e para comparar configurações de forma reprodutível.
+- **Relação com outros conceitos:** Corresponde a `temperatura=0` em `gerar` (`src/geracao.py`), ou à função dedicada `gerar_texto_greedy`; é também o único modo implementado no `generate_text_simple` do livro (seção 4.7) — temperatura e top-k são extensões além do que o capítulo cobre.
+- **Exemplo conceitual:** `exp16` (16.4) roda a mesma geração greedy três vezes seguidas e confirma que as três saídas são idênticas — diferente do que aconteceria com `temperatura > 0`.
+
+---
+
+### 20. Número de Parâmetros e Memória de um LLM
+- **Tradução:** Contagem de parâmetros e memória do modelo
+- **Definição:** O total de parâmetros treináveis de um `GPTModel` pode ser decomposto por componente (embeddings, blocos Transformer, LayerNorm final, `out_head`) e convertido em memória estimada (parâmetros × 4 bytes, assumindo float32).
+- **Funcionalidade:** Permite projetar o custo de configurações maiores sem precisar instanciá-las na memória — basta uma fórmula fechada, validada contra um modelo pequeno de verdade.
+- **Relação com outros conceitos:** `parametros_por_componente` e `memoria_em_mb` (`src/transformer.py`) implementam essa análise, reaproveitando `numero_de_parametros` já definido na Sprint 3; o livro faz a mesma conta manualmente para o GPT-2 small (163.009.536 parâmetros, 621,83 MB).
+- **Exemplo conceitual:** `exp14` (14.3) valida uma fórmula fechada de contagem contra um `GPTModel` pequeno instanciado (bateram exatamente) e depois a usa, sem instanciar nada, para projetar o GPT-2 XL: 1.637.792.000 parâmetros, cerca de 6,1 GB em float32.
+
+---
