@@ -1,30 +1,27 @@
 """
-Projeto LLM — Sprints 2 e 3.
+Projeto LLM — Sprints 2 a 4.
 
 Fluxo implementado:
 
     Texto -> Tokenização -> Tokens -> Token IDs -> Sequências (entrada, alvo)
           -> Token Embeddings -> Positional Embeddings -> Lote        (Sprint 2)
           -> Self-Attention -> Causal Attention -> Multi-Head Attention (Sprint 3)
-          -> Context vectors -> blocos Transformer -> logits            (Sprint 4)
+          -> N x TransformerBlock -> LayerNorm final -> logits          (Sprint 4)
           -> geração autoregressiva de texto                            (Sprint 4)
 
 Uso típico:
 
-    from sprint2 import create_dataloader_v1, GPTEmbedding, obter_tokenizador_bpe
+    from src import GPTModel, gerar_texto, obter_tokenizador_bpe
 
     tokenizador = obter_tokenizador_bpe()
-    dataloader = create_dataloader_v1(texto, tokenizer=tokenizador,
-                                      batch_size=8, max_length=256, stride=128)
-    entradas, alvos = next(iter(dataloader))
 
-    camada = GPTEmbedding(vocab_size=tokenizador.n_vocab,
-                          output_dim=768, context_length=256)
-    input_embeddings = camada(entradas)   # (8, 256, 768)
+    modelo = GPTModel(vocab_size=tokenizador.n_vocab, context_length=256,
+                      emb_dim=768, n_layers=12, num_heads=12)
 
-    atencao = MultiHeadAttention(d_in=768, d_out=768,
-                                 context_length=256, num_heads=12)
-    context_vectors = atencao(input_embeddings)   # (8, 256, 768)
+    logits = modelo(entradas)             # entradas: (8, 256) -> (8, 256, 50257)
+
+    texto_gerado = gerar_texto(modelo, tokenizador, prompt="Era uma vez",
+                               max_novos_tokens=20, context_size=256)
 
 Requer: torch e tiktoken.
 """
@@ -75,6 +72,15 @@ from .tokenizer import (
     inverter_vocabulario,
     juntar_textos,
     tokenizar,
+)
+from .transformer import (
+    GELU,
+    FeedForward,
+    GPTModel,
+    LayerNorm,
+    TransformerBlock,
+    memoria_em_mb,
+    parametros_por_componente,
 )
 
 __all__ = [
@@ -130,4 +136,12 @@ __all__ = [
     "entropia_da_distribuicao",
     "tokens_para_cobrir",
     "taxa_de_repeticao",
+    # Transformer Block e modelo GPT (Sprint 4)
+    "LayerNorm",
+    "GELU",
+    "FeedForward",
+    "TransformerBlock",
+    "GPTModel",
+    "memoria_em_mb",
+    "parametros_por_componente",
 ]
