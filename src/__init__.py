@@ -6,7 +6,8 @@ Fluxo implementado:
     Texto -> Tokenização -> Tokens -> Token IDs -> Sequências (entrada, alvo)
           -> Token Embeddings -> Positional Embeddings -> Lote        (Sprint 2)
           -> Self-Attention -> Causal Attention -> Multi-Head Attention (Sprint 3)
-          -> Context vectors -> blocos Transformer                     (Sprint 4)
+          -> Context vectors -> blocos Transformer -> logits            (Sprint 4)
+          -> geração autoregressiva de texto                            (Sprint 4)
 
 Uso típico:
 
@@ -42,6 +43,20 @@ from .attention import (
     self_attention_simples,
 )
 from .bpe import BPETokenizerSimples, TiktokenTokenizer, obter_tokenizador_bpe
+from .geracao import (
+    aplicar_temperatura,
+    aplicar_top_k,
+    distribuicao_do_proximo_token,
+    entropia_da_distribuicao,
+    gerar,
+    gerar_passo_a_passo,
+    gerar_texto,
+    gerar_texto_greedy,
+    ids_para_texto,
+    taxa_de_repeticao,
+    texto_para_ids,
+    tokens_para_cobrir,
+)
 from .dataset import (
     GPTDatasetV1,
     create_dataloader_v1,
@@ -102,4 +117,17 @@ __all__ = [
     "MultiHeadAttention",
     "entropia_dos_pesos",
     "numero_de_parametros",
+    # geração de texto (Sprint 4)
+    "gerar",
+    "gerar_texto_greedy",
+    "gerar_texto",
+    "gerar_passo_a_passo",
+    "texto_para_ids",
+    "ids_para_texto",
+    "aplicar_temperatura",
+    "aplicar_top_k",
+    "distribuicao_do_proximo_token",
+    "entropia_da_distribuicao",
+    "tokens_para_cobrir",
+    "taxa_de_repeticao",
 ]
