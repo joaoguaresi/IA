@@ -579,3 +579,272 @@ Definição: Soma de vários vetores em que cada um é multiplicado por um coefi
 Função no modelo de linguagem: É a operação final do self-attention: o context vector é a soma ponderada dos vetores de entrada, ou dos values, usando os attention weights como coeficientes.
 Relação com outros conceitos: Consome os attention weights e produz o context vector. Em forma matricial, corresponde exatamente a attn_weights @ values.
 Exemplo conceitual: z⁽²⁾ = 0,1385·x⁽¹⁾ + 0,2379·x⁽²⁾ + 0,2333·x⁽³⁾ + 0,1240·x⁽⁴⁾ + 0,1082·x⁽⁵⁾ + 0,1581·x⁽⁶⁾
+
+
+Glossário — Capítulo 4
+
+Activations
+Termo original: Activations
+Tradução/equivalente: Ativações
+Definição: Os valores de saída produzidos por uma camada da rede neural depois de aplicada sua função de activation.
+Função no modelo de linguagem: São o que a layer normalization ajusta. Manter as activations com média e variância consistentes entre as camadas é o que estabiliza o treinamento de redes profundas.
+Relação com outros conceitos: São a entrada da layer normalization e a saída de funções como ReLU e GELU. Activations mal escalonadas são uma das causas de vanishing e exploding gradients.
+Exemplo conceitual: A saída tensor([[0.2260, 0.3470, 0.0000, 0.2216, 0.0000, 0.0000]]) de uma camada Linear seguida de ReLU — os zeros são as activations que a ReLU cortou.
+
+Batch normalization
+Termo original: Batch normalization
+Tradução/equivalente: Normalização por lote
+Definição: Técnica de normalização que ajusta as activations ao longo da dimensão de batch, usando estatísticas calculadas sobre todos os exemplos do lote.
+Função no modelo de linguagem: Não é usada em LLMs. Aparece no capítulo apenas como contraste, para explicar por que a layer normalization é a escolha adequada.
+Relação com outros conceitos: Opõe-se à layer normalization, que normaliza ao longo da dimensão de features. Como a layer normalization independe do batch size, ela é mais estável em treinamento distribuído e em ambientes com recursos restritos.
+Exemplo conceitual: Com batch size 1, a batch normalization não tem estatísticas suficientes para funcionar; a layer normalization continua operando normalmente, porque olha apenas as 768 dimensões daquele token.
+
+Biased variance
+Termo original: Biased variance
+Tradução/equivalente: Variância enviesada
+Definição: Estimativa de variância que divide pelo número de elementos n, sem aplicar a correção de Bessel, que usaria n − 1 no denominador.
+Função no modelo de linguagem: É a forma como a variância é calculada dentro do LayerNorm. Garante compatibilidade com os pesos pré-treinados do GPT-2, que foi implementado em TensorFlow com esse mesmo comportamento padrão.
+Relação com outros conceitos: É obtida pelo argumento unbiased=False em x.var(). Para a embedding dimension dos LLMs, grande por natureza, a diferença entre n e n − 1 é desprezível.
+Exemplo conceitual: var = x.var(dim=-1, keepdim=True, unbiased=False) — com emb_dim = 768, dividir por 768 ou por 767 altera o resultado em menos de 0,2%.
+
+DummyGPTModel
+Termo original: DummyGPTModel
+Tradução/equivalente: Modelo GPT de placeholder
+Definição: Versão simplificada da arquitetura GPT em que o transformer block e a layer normalization são substituídos por classes vazias que apenas devolvem a entrada.
+Função no modelo de linguagem: Serve de andaime didático: permite ver o fluxo completo de dados — token embeddings, positional embeddings, dropout, blocos, normalização final e output head — antes de implementar cada peça.
+Relação com outros conceitos: É substituído pelo GPTModel real quando TransformerBlock e LayerNorm ficam prontos. Usa DummyTransformerBlock e DummyLayerNorm como placeholders.
+Exemplo conceitual: Mesmo sem nenhum bloco funcional, o DummyGPTModel já produz a forma de saída correta: torch.Size([2, 4, 50257]).
+
+emb_dim
+Termo original: emb_dim
+Tradução/equivalente: Dimensão do embedding
+Definição: Chave da configuração que define o tamanho do vetor que representa cada token dentro do modelo.
+Função no modelo de linguagem: Define a largura de toda a rede: é a dimensão que entra e sai de cada transformer block e a que a layer normalization normaliza.
+Relação com outros conceitos: Corresponde ao d_in e ao d_out do módulo de attention, que nos modelos GPT são iguais. É fatiada entre as cabeças pela fórmula head_dim = emb_dim // n_heads.
+Exemplo conceitual: No GPT-2 small, emb_dim = 768. No GPT-2 XL, 1.600. É também o valor que o FeedForward expande por quatro, de 768 para 3.072.
+
+eps
+Termo original: eps (epsilon)
+Tradução/equivalente: Épsilon
+Definição: Constante muito pequena somada à variância antes da divisão, dentro do LayerNorm.
+Função no modelo de linguagem: Impede divisão por zero quando todos os valores de um vetor são iguais e a variância é exatamente 0 — situação rara, mas que interromperia o treinamento.
+Relação com outros conceitos: Faz parte da fórmula da layer normalization, aplicada dentro da raiz quadrada do denominador.
+Exemplo conceitual: self.eps = 1e-5; norm_x = (x - mean) / torch.sqrt(var + self.eps)
+
+.eval()
+Termo original: .eval()
+Tradução/equivalente: Modo de avaliação
+Definição: Método do nn.Module que coloca o modelo em modo de inferência, desligando componentes que só devem agir durante o treinamento.
+Função no modelo de linguagem: Desativa o dropout na hora de gerar texto. Sem isso, o modelo descartaria pesos aleatoriamente durante a geração e produziria saídas diferentes a cada execução.
+Relação com outros conceitos: É o contraponto de .train(). Afeta diretamente o comportamento das camadas de dropout presentes nos embeddings, nas shortcut connections e no multi-head attention.
+Exemplo conceitual: model.eval() antes de chamar generate_text_simple — a geração passa a ser determinística para uma mesma entrada.
+
+Exploding gradients
+Termo original: Exploding gradients
+Tradução/equivalente: Gradientes explosivos
+Definição: Problema em que os gradients crescem descontroladamente ao se propagarem pelas camadas, provocando atualizações de peso grandes demais.
+Função no modelo de linguagem: É um dos dois modos de falha que tornam instável o treinamento de redes profundas. A layer normalization ajuda a contê-lo ao manter as activations em escala consistente.
+Relação com outros conceitos: É o problema oposto ao dos vanishing gradients, e ambos têm a mesma origem: a composição de muitas camadas. Layer normalization e shortcut connections atacam os dois.
+Exemplo conceitual: Se cada camada multiplica o gradient por 1,5, após 12 transformer blocks o fator acumulado passa de 100 — o peso salta para longe do mínimo em vez de convergir.
+
+FeedForward
+Termo original: FeedForward
+Tradução/equivalente: Rede feed forward
+Definição: Submódulo composto por duas camadas Linear separadas por uma activation GELU, que expande a embedding dimension e depois a contrai de volta.
+Função no modelo de linguagem: Processa cada posição da sequência de forma independente, complementando o multi-head attention, que é quem relaciona as posições entre si.
+Relação com outros conceitos: É um dos dois componentes principais do transformer block. A expansão interna usa o fator 4 e a activation GELU.
+Exemplo conceitual: Com emb_dim = 768: a primeira Linear leva de 768 para 3.072, a GELU é aplicada, e a segunda Linear volta de 3.072 para 768. Entrada e saída têm a mesma forma, torch.Size([2, 3, 768]).
+
+
+generate_text_simple
+Termo original: generate_text_simple
+Tradução/equivalente: Função simples de geração de texto
+Definição: Loop que, a cada iteração, corta o contexto para caber no context size, calcula os logits, escolhe o token mais provável e o anexa à sequência.
+Função no modelo de linguagem: É a ponte entre o tensor de saída do modelo e o texto legível. Transforma a arquitetura em algo que de fato gera linguagem.
+Relação com outros conceitos: Usa torch.no_grad(), softmax, torch.argmax e torch.cat. Implementa greedy decoding; o capítulo 5 adiciona estratégias de amostragem para introduzir variabilidade.
+Exemplo conceitual: Partindo de "Hello, I am" (IDs [15496, 11, 314, 716]) com max_new_tokens=6, a saída tem 10 tokens.
+
+GPT_CONFIG_124M
+Termo original: GPT_CONFIG_124M
+Tradução/equivalente: Dicionário de configuração do GPT-2 small
+Definição: Dicionário Python que reúne todos os hiperparâmetros da arquitetura em um único objeto, passado adiante como cfg.
+Função no modelo de linguagem: Centraliza a configuração: trocar o tamanho do modelo — de GPT-2 small para medium, large ou XL — exige alterar apenas esse dicionário, sem tocar no código das classes.
+Relação com outros conceitos: Suas chaves são vocab_size, context_length, emb_dim, n_heads, n_layers, drop_rate e qkv_bias. É consumido por GPTModel, TransformerBlock e FeedForward.
+Exemplo conceitual: GPT_CONFIG_124M = {"vocab_size": 50257, "context_length": 1024, "emb_dim": 768, "n_heads": 12, "n_layers": 12, "drop_rate": 0.1, "qkv_bias": False}
+
+GPTModel
+Termo original: GPTModel
+Tradução/equivalente: Modelo GPT
+Definição: Classe que reúne a arquitetura completa: token embeddings, positional embeddings, dropout, a pilha de transformer blocks, a layer normalization final e a output head.
+Função no modelo de linguagem: É o modelo propriamente dito, o objeto que será pré-treinado no capítulo 5 e carregado com os pesos da OpenAI no capítulo 6.
+Relação com outros conceitos: Substitui o DummyGPTModel usando as classes reais TransformerBlock e LayerNorm. Recebe toda a configuração via GPT_CONFIG_124M.
+Exemplo conceitual: Alimentado com um batch de dois textos de quatro tokens, devolve logits de forma torch.Size([2, 4, 50257]) e soma 163.009.536 parameters.
+
+Greedy decoding
+Termo original: Greedy decoding
+Tradução/equivalente: Decodificação gulosa
+Definição: Estratégia de geração que escolhe sempre o token de maior probabilidade, sem nenhuma aleatoriedade.
+Função no modelo de linguagem: É a estratégia mais simples de geração e a usada em generate_text_simple. Produz saídas determinísticas, porém repetitivas e pouco criativas.
+Relação com outros conceitos: É implementada por torch.argmax sobre os logits. O capítulo 5 a substitui por temperature scaling e top-k sampling, que introduzem variabilidade.
+Exemplo conceitual: Se o vocabulário atribuir probabilidade 0,02 ao token 257 e menos a todos os outros, greedy decoding escolhe o 257 todas as vezes, em toda execução.
+
+Layer normalization (LayerNorm)
+Termo original: Layer normalization
+Tradução/equivalente: Normalização de camada
+Definição: Operação que ajusta as activations de uma camada para média 0 e variância 1, calculando as estatísticas ao longo da dimensão de features de cada exemplo.
+Função no modelo de linguagem: Estabiliza e acelera o treinamento. É aplicada antes do multi-head attention, antes da feed forward network e antes da camada final de saída.
+Relação com outros conceitos: Opõe-se à batch normalization. Usa eps, scale e shift, e biased variance. Sua posição em relação aos submódulos define o Pre-LayerNorm e o Post-LayerNorm.
+Exemplo conceitual: Entradas com média 0,1324 e variância 0,0231 saem com média −5,96 × 10⁻⁸ e variância 1,0 — o desvio de zero é apenas erro de precisão numérica.
+
+Logits
+Termo original: Logits
+Tradução/equivalente: Logits
+Definição: Saídas brutas e não normalizadas da última camada linear do modelo, uma por token do vocabulário.
+Função no modelo de linguagem: São a previsão do modelo antes de virar probabilidade. Cada posição corresponde a um token possível, e o maior valor indica o token mais provável.
+Relação com outros conceitos: São convertidos em probabilidades pela softmax, embora o argmax possa ser aplicado diretamente a eles, já que a softmax é monotônica.
+Exemplo conceitual: O GPTModel devolve logits de forma [2, 4, 50257]: para cada um dos quatro tokens de cada um dos dois textos, um score para cada palavra do vocabulário.
+
+Loss function
+Termo original: Loss function
+Tradução/equivalente: Função de perda
+Definição: Função que mede a distância entre a saída do modelo e o alvo desejado, produzindo um único número a ser minimizado.
+Função no modelo de linguagem: É o que o treinamento minimiza, e é a partir dela que os gradients são calculados por backpropagation. No capítulo, aparece no experimento que mede os gradients com e sem shortcut connections.
+Relação com outros conceitos: Seu valor alimenta loss.backward(), que calcula os gradients de todos os parameters do modelo.
+Exemplo conceitual: loss = nn.MSELoss(); loss = loss(output, target) — no exemplo das shortcut connections, o alvo escolhido é simplesmente 0.
+
+n_layers
+Termo original: n_layers
+Tradução/equivalente: Número de camadas
+Definição: Chave da configuração que define quantos transformer blocks são empilhados na arquitetura.
+Função no modelo de linguagem: Controla a profundidade do modelo. É o principal fator que separa as diferentes versões do GPT-2 em capacidade e em número de parameters.
+Relação com outros conceitos: É consumida por nn.Sequential ao construir a pilha de blocos. Quanto maior, mais relevantes se tornam a layer normalization e as shortcut connections.
+Exemplo conceitual: n_layers = 12 no GPT-2 small; 48 no GPT-2 XL, de 1.542 milhões de parameters.
+
+nn.Embedding
+Termo original: nn.Embedding
+Tradução/equivalente: Camada de embedding
+Definição: Camada do PyTorch que funciona como tabela de consulta: recebe índices inteiros e devolve os vetores correspondentes de sua matriz de pesos.
+Função no modelo de linguagem: Converte token IDs em vetores densos e gera os positional embeddings. São as duas primeiras camadas do GPTModel.
+Relação com outros conceitos: É usada duas vezes: tok_emb, com vocab_size linhas, e pos_emb, com context_length linhas. Seus pesos são treináveis como quaisquer outros.
+Exemplo conceitual: self.tok_emb = nn.Embedding(50257, 768) — uma matriz de 50.257 × 768, ou 38.597.376 parameters só nessa camada.
+
+nn.Sequential
+Termo original: nn.Sequential
+Tradução/equivalente: Contêiner sequencial
+Definição: Contêiner do PyTorch que encadeia módulos, passando automaticamente a saída de um como entrada do próximo.
+Função no modelo de linguagem: Monta a pilha de transformer blocks em uma linha de código e encadeia as camadas internas do FeedForward.
+Relação com outros conceitos: É alternativa ao nn.ModuleList, que exige escrever o laço de iteração no método forward. É usado com o operador de desempacotamento e uma list comprehension sobre n_layers.
+Exemplo conceitual: self.trf_blocks = nn.Sequential(*[TransformerBlock(cfg) for _ in range(cfg["n_layers"])]) — cria e encadeia os 12 blocos.
+
+numel()
+Termo original: numel()
+Tradução/equivalente: Número de elementos
+Definição: Método de tensores do PyTorch que devolve a quantidade total de elementos que eles contêm.
+Função no modelo de linguagem: É como se conta o número de parameters do modelo, somando o resultado sobre todos os tensores devolvidos por model.parameters().
+Relação com outros conceitos: Combina-se com float32 para estimar a memória ocupada, e com o weight tying para distinguir parameters totais de parameters efetivamente treináveis.
+Exemplo conceitual: total_params = sum(p.numel() for p in model.parameters()) resulta em 163.009.536 para o GPTModel.
+
+out_head
+Termo original: out_head (output head)
+Tradução/equivalente: Cabeça de saída
+Definição: Camada Linear final, sem bias, que projeta cada vetor de saída do último transformer block no espaço do vocabulário.
+Função no modelo de linguagem: É quem produz os logits. Converte uma representação de 768 dimensões em um score para cada uma das 50.257 palavras possíveis.
+Relação com outros conceitos: Não deve ser confundida com a out_proj do multi-head attention, que é interna a cada bloco. É a camada removida da contagem quando se aplica o weight tying.
+Exemplo conceitual: self.out_head = nn.Linear(768, 50257, bias=False) — matriz de peso com forma torch.Size([50257, 768]), idêntica à da camada de token embedding.
+
+Post-LayerNorm
+Termo original: Post-LayerNorm
+Tradução/equivalente: Normalização posterior
+Definição: Arranjo em que a layer normalization é aplicada depois dos submódulos de self-attention e feed forward.
+Função no modelo de linguagem: É o arranjo do transformer original. Aparece no capítulo apenas como contraste histórico, porque leva com frequência a dinâmicas de treinamento piores.
+Relação com outros conceitos: Opõe-se ao Pre-LayerNorm, adotado pelo GPT-2 e pela implementação do livro.
+Exemplo conceitual: No arranjo Post-LayerNorm a ordem seria x = norm(x + att(x)); no Pre-LayerNorm é x = x + att(norm(x)).
+
+Pre-LayerNorm
+Termo original: Pre-LayerNorm
+Tradução/equivalente: Normalização anterior
+Definição: Arranjo em que a layer normalization é aplicada antes dos submódulos de self-attention e feed forward, dentro do transformer block.
+Função no modelo de linguagem: É o arranjo usado no GPT-2 e na implementação do livro. Produz dinâmicas de treinamento mais estáveis do que a alternativa.
+Relação com outros conceitos: Opõe-se ao Post-LayerNorm. Trabalha em conjunto com as shortcut connections, que somam a entrada original depois do submódulo.
+Exemplo conceitual: shortcut = x; x = self.norm1(x); x = self.att(x); x = self.drop_shortcut(x); x = x + shortcut
+
+qkv_bias
+Termo original: qkv_bias
+Tradução/equivalente: Bias de query, key e value
+Definição: Chave da configuração que determina se as camadas Linear que produzem query, key e value incluem um vetor de bias.
+Função no modelo de linguagem: Fica desabilitada por padrão, seguindo a prática dos LLMs modernos, mas precisa ser reativada para carregar os pesos pré-treinados do GPT-2 da OpenAI.
+Relação com outros conceitos: É repassada ao MultiHeadAttention pelo TransformerBlock. Relaciona-se ao argumento bias das camadas nn.Linear.
+Exemplo conceitual: "qkv_bias": False no GPT_CONFIG_124M; no capítulo 6 o valor passa a True para dar compatibilidade com os pesos originais.
+
+ReLU
+Termo original: ReLU (rectified linear unit)
+Tradução/equivalente: Unidade linear retificada
+Definição: Função de activation que devolve a entrada se ela for positiva e zero caso contrário.
+Função no modelo de linguagem: Não é usada no GPT. Aparece no capítulo como função de referência, nos exemplos de layer normalization e na comparação com a GELU.
+Relação com outros conceitos: É substituída pela GELU nos LLMs. Seu canto agudo em zero e o gradient nulo para entradas negativas são justamente as limitações que a GELU contorna.
+Exemplo conceitual: Aplicada a [-0.5, 0.3], a ReLU devolve [0.0, 0.3] — o valor negativo é zerado e deixa de contribuir para o aprendizado.
+
+scale e shift
+Termo original: scale and shift
+Tradução/equivalente: Escala e deslocamento
+Definição: Dois vetores de parameters treináveis, do tamanho da embedding dimension, aplicados depois da normalização: um multiplica, o outro soma.
+Função no modelo de linguagem: Devolvem ao modelo a liberdade que a normalização retirou. Se média 0 e variância 1 não forem o melhor para aquela camada, o modelo aprende a escala e o deslocamento que forem.
+Relação com outros conceitos: São parte do LayerNorm, inicializados respectivamente com uns e zeros, de modo que a camada comece como normalização pura.
+Exemplo conceitual: self.scale = nn.Parameter(torch.ones(emb_dim)); self.shift = nn.Parameter(torch.zeros(emb_dim)); return self.scale * norm_x + self.shift
+
+Shortcut connections
+Termo original: Shortcut connections / skip connections / residual connections
+Tradução/equivalente: Conexões de atalho
+Definição: Conexões que somam a entrada de um bloco à sua saída, criando um caminho que pula uma ou mais camadas.
+Função no modelo de linguagem: Preservam o fluxo de gradients no backward pass, permitindo treinar redes muito profundas. São aplicadas duas vezes em cada transformer block.
+Relação com outros conceitos: Atacam o vanishing gradient problem. Vieram das residual networks da visão computacional e são um building block central dos LLMs.
+Exemplo conceitual: Nos testes do livro, sem shortcut os gradients caem de 0,0050 na última camada para 0,0002 na primeira; com shortcut vão de 1,3259 para 0,2217, sem colapsar.
+
+torch.argmax
+Termo original: torch.argmax
+Tradução/equivalente: Índice do valor máximo
+Definição: Função que devolve a posição do maior valor de um tensor ao longo de uma dimensão.
+Função no modelo de linguagem: Seleciona o próximo token na geração: a posição do maior score corresponde ao token ID escolhido.
+Relação com outros conceitos: É o que implementa o greedy decoding. Como a softmax é monotônica, aplicá-la antes do argmax é matematicamente redundante — o livro mantém o passo apenas por clareza didática.
+Exemplo conceitual: idx_next = torch.argmax(probas, dim=-1, keepdim=True) — se o maior valor está na posição 257, o token gerado é o de ID 257, que decodifica como "a".
+
+torch.no_grad()
+Termo original: torch.no_grad()
+Tradução/equivalente: Sem cálculo de gradientes
+Definição: Gerenciador de contexto que desliga a construção do grafo de computação para cálculo de gradients.
+Função no modelo de linguagem: É usado na geração de texto. Como não há treinamento ali, rastrear gradients só consumiria memória e tempo à toa.
+Relação com outros conceitos: É o complemento de .eval() na inferência: um desliga o dropout, o outro desliga o rastreamento de gradients.
+Exemplo conceitual: with torch.no_grad(): logits = model(idx_cond) — dentro do laço de generate_text_simple.
+
+Transformer block
+Termo original: Transformer block
+Tradução/equivalente: Bloco transformer
+Definição: Unidade estrutural que combina masked multi-head attention, feed forward network, duas layer normalizations, dropout e duas shortcut connections.
+Função no modelo de linguagem: É o componente que se repete ao longo da arquitetura e concentra quase toda a capacidade do modelo. Preserva a forma do tensor, o que permite empilhá-lo livremente.
+Relação com outros conceitos: Reúne praticamente tudo que foi construído nos capítulos 3 e 4. É repetido n_layers vezes dentro do GPTModel.
+Exemplo conceitual: Entrada torch.Size([2, 4, 768]) produz saída torch.Size([2, 4, 768]) — mesma forma, conteúdo recodificado com informação de toda a sequência.
+
+Vanishing gradient problem
+Termo original: Vanishing gradient problem
+Tradução/equivalente: Problema do desaparecimento do gradiente
+Definição: Fenômeno em que os gradients encolhem progressivamente ao se propagarem para trás pelas camadas, até ficarem pequenos demais para atualizar as camadas iniciais.
+Função no modelo de linguagem: É a razão pela qual redes muito profundas, como os LLMs, não treinam sem cuidados adicionais. As camadas iniciais praticamente param de aprender.
+Relação com outros conceitos: É resolvido pelas shortcut connections, que criam um caminho curto para o gradient. É o problema oposto ao dos exploding gradients.
+Exemplo conceitual: Na rede de cinco camadas sem shortcut do livro, o gradient médio cai de 0,0050 na última camada para 0,0002 na primeira — uma redução de 25 vezes em apenas cinco camadas.
+
+vocab_size
+Termo original: vocab_size
+Tradução/equivalente: Tamanho do vocabulário
+Definição: Chave da configuração que informa quantos tokens distintos o tokenizer reconhece.
+Função no modelo de linguagem: Define o número de linhas da camada de token embedding e o número de colunas da output head — as duas maiores camadas do modelo.
+Relação com outros conceitos: Vem do BPE tokenizer do capítulo 2. É a última dimensão do tensor de logits e a razão de o weight tying economizar tanta memória.
+Exemplo conceitual: vocab_size = 50257, o vocabulário do tokenizer do GPT-2. É por isso que a saída tem forma [2, 4, 50257].
+
+Weight tying
+Termo original: Weight tying
+Tradução/equivalente: Compartilhamento de pesos
+Definição: Técnica em que a camada de token embedding e a camada linear de saída compartilham a mesma matriz de pesos, em vez de manter duas cópias.
+Função no modelo de linguagem: Reduz a pegada de memória e a complexidade do modelo. É o que explica a diferença entre os 163 milhões de parameters contados e os 124 milhões anunciados do GPT-2.
+Relação com outros conceitos: Só é possível porque tok_emb e out_head têm exatamente a mesma forma. O livro usa camadas separadas por dar melhor desempenho, mas implementa o weight tying no capítulo 6, ao carregar os pesos da OpenAI.
+Exemplo conceitual: 163.009.536 − 38.597.376 (parameters da out_head) = 124.412.160, exatamente o tamanho do GPT-2 small original.
+
