@@ -848,3 +848,12 @@ Função no modelo de linguagem: Reduz a pegada de memória e a complexidade do 
 Relação com outros conceitos: Só é possível porque tok_emb e out_head têm exatamente a mesma forma. O livro usa camadas separadas por dar melhor desempenho, mas implementa o weight tying no capítulo 6, ao carregar os pesos da OpenAI.
 Exemplo conceitual: 163.009.536 − 38.597.376 (parameters da out_head) = 124.412.160, exatamente o tamanho do GPT-2 small original.
 
+GELU
+Termo original: GELU (Gaussian error linear unit)
+Tradução/equivalente: Unidade linear com erro gaussiano
+Definição: Função de activation suave definida exatamente como GELU(x) = x·Φ(x), em que Φ é a função de distribuição acumulada da gaussiana padrão; na prática usa-se uma aproximação por tanh.
+Função no modelo de linguagem: É a activation usada dentro do FeedForward dos modelos GPT. Sua suavidade melhora as propriedades de otimização em redes muito profundas.
+Relação com outros conceitos: Substitui a ReLU. Ao contrário dela, tem gradient diferente de zero para quase todos os valores negativos, o que mantém neurônios com entrada negativa contribuindo para o aprendizado.
+Exemplo conceitual: GELU(x) ≈ 0.5·x·(1 + tanh[√(2/π)·(x + 0.044715·x³)]) — a aproximação encontrada por ajuste de curva, usada também no GPT-2 original.
+
+
