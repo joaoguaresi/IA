@@ -11,3 +11,6 @@ __pycache__/
 
 # Ambiente/IDE
 .vscode/
+
+# Arquivos de bloqueio temporários do Word/Office (abertos durante a edição)
+~$*
