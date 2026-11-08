@@ -931,3 +931,178 @@
 - **Exemplo conceitual:** `exp14` (14.3) valida uma fórmula fechada de contagem contra um `GPTModel` pequeno instanciado (bateram exatamente) e depois a usa, sem instanciar nada, para projetar o GPT-2 XL: 1.637.792.000 parâmetros, cerca de 6,1 GB em float32.
 
 ---
+
+# Glossário — Capítulo 5: Pretraining on Unlabeled Data
+
+---
+
+### 1. text_to_token_ids / token_ids_to_text
+- **Tradução:** Conversão entre texto e Token IDs
+- **Definição:** Par de funções utilitárias (seção 5.1.1) que encapsulam, respectivamente, a tokenização de um texto em um tensor `(1, num_tokens)` pronto para o modelo (`unsqueeze(0)` acrescenta a dimensão de lote) e o caminho inverso, removendo a dimensão de lote e decodificando de volta para texto.
+- **Funcionalidade:** Evitam repetir, em todo lugar do capítulo, a mesma sequência de três chamadas (`tokenizer.encode` → `torch.tensor` → `unsqueeze`); formalizam o "contrato" de forma que todas as demais funções do capítulo (geração, avaliação, treino) passam a assumir.
+- **Relação com outros conceitos:** É exatamente o par `texto_para_ids`/`ids_para_texto` já implementado em `src/geracao.py` na Sprint 4 — o livro só os apresenta formalmente agora, no Capítulo 5, embora a necessidade já existisse desde a geração de texto do Capítulo 4.
+- **Exemplo conceitual:** `text_to_token_ids("Every effort moves you", tokenizer)` produz um tensor de forma `(1, 4)`; `token_ids_to_text` desfaz essa transformação, retornando a string original (ou o texto gerado pelo modelo).
+
+---
+
+### 2. Text Generation Loss (Perda de Geração de Texto)
+- **Tradução:** Perda de geração de texto
+- **Definição:** Medida numérica de "quão longe" os tokens gerados por um LLM estão dos tokens-alvo corretos — o conceito geral que a cross-entropy loss formaliza matematicamente.
+- **Funcionalidade:** Antes do Capítulo 5, só existia uma forma qualitativa de avaliar o modelo (ler o texto gerado e julgar se "parece bom"); a perda de geração introduz uma métrica numérica, necessária tanto para acompanhar o progresso quanto para servir de sinal de treino via backpropagation.
+- **Relação com outros conceitos:** É calculada a partir das probabilidades que o softmax atribui aos tokens-alvo (ver "Probabilidades do Token-Alvo"); sem ela, não haveria nada para `loss.backward()` diferenciar.
+- **Exemplo conceitual:** Um modelo ainda não treinado gera "Every effort moves you rentingetic wasn? refres RexMeCHicular stren" para o contexto "Every effort moves you" — claramente incoerente, mas só a perda numérica permite comparar objetivamente esse resultado com o de outra configuração.
+
+---
+
+### 3. Probabilidades do Token-Alvo (Target Token Probabilities)
+- **Tradução:** Probabilidades do token-alvo
+- **Definição:** Para cada posição de uma sequência, a probabilidade (após softmax) que o modelo atribuiu especificamente ao token que deveria ter sido gerado ali — não ao token de maior probabilidade, mas ao token correto.
+- **Funcionalidade:** É o primeiro ingrediente do cálculo da perda: o objetivo do treino é aumentar exatamente essas probabilidades, uma de cada vez, a cada posição de cada exemplo.
+- **Relação com outros conceitos:** Extraídas via indexação avançada (`probas[text_idx, [0, 1, 2], targets[text_idx]]`); alimentam diretamente o cálculo da log-probabilidade média negativa (cross-entropy).
+- **Exemplo conceitual:** Para a frase-alvo " effort moves you", um modelo não treinado atribui probabilidades como `[7.45e-05, 3.11e-05, 1.16e-05]` a cada token correto — próximas de zero, já que o vocabulário tem 50.257 entradas e os pesos ainda são aleatórios.
+
+---
+
+### 4. Log-Probabilidade Média Negativa (Negative Average Log-Probability)
+- **Tradução:** Log-probabilidade média negativa
+- **Definição:** Resultado de aplicar logaritmo às probabilidades do token-alvo, calcular a média desses logs e inverter o sinal — o procedimento manual, passo a passo, que a cross-entropy loss do PyTorch executa internamente.
+- **Funcionalidade:** Trabalhar com logaritmos de probabilidades é mais tratável matematicamente em otimização do que as probabilidades brutas (produtos de números muito pequenos tendem a *underflow* numérico; somas de logs, não); inverter o sinal transforma um valor que deveria subir até 0 (a probabilidade log, sempre ≤ 0) em um valor que deve descer até 0 — a convenção usual de uma função de perda a ser minimizada.
+- **Relação com outros conceitos:** É numericamente idêntica à cross-entropy loss — "cross entropy" e "log-probabilidade média negativa" são termos usados de forma intercambiável na prática, segundo o próprio livro.
+- **Exemplo conceitual:** Para seis probabilidades-alvo (duas sequências de três tokens), os logs são `[-9.50, -10.38, -11.37, -11.48, -9.78, -12.26]`; a média é `-10.7940`; invertendo o sinal, a perda é `10.7940` — exatamente o valor que `cross_entropy` devolve para a mesma entrada.
+
+---
+
+### 5. Cross-Entropy Loss
+- **Tradução:** Perda de entropia cruzada
+- **Definição:** Medida da diferença entre duas distribuições de probabilidade — aqui, a distribuição "verdadeira" (um token-alvo específico, com probabilidade 1) e a distribuição prevista pelo modelo (os 50.257 valores de probabilidade do softmax).
+- **Funcionalidade:** É a função de perda padrão para classificação multi-classe, e um LLM prevendo o próximo token é, posição a posição, exatamente uma classificação multi-classe entre as `vocab_size` palavras possíveis; `torch.nn.functional.cross_entropy` calcula, em uma única chamada, os seis passos manuais (probabilidades → seleção do alvo → log → média → sinal trocado).
+- **Relação com outros conceitos:** Exige achatar logits `(batch, tokens, vocab_size)` em `(batch·tokens, vocab_size)` e alvos `(batch, tokens)` em `(batch·tokens,)`, para que a função enxergue cada posição como um exemplo independente de classificação. Implementada em `calcular_perda_lote` (`src/treino.py`).
+- **Exemplo conceitual:** `torch.nn.functional.cross_entropy(logits_flat, targets_flat)` sobre os mesmos dados do exemplo manual devolve `tensor(10.7940)` — idêntico ao cálculo passo a passo, confirmado também pelo `exp18` (18.4) deste projeto com valores próprios (perda manual = perda do PyTorch = `True`).
+
+---
+
+### 6. Perplexity
+- **Tradução:** Perplexidade
+- **Definição:** `e` elevado à perda (`torch.exp(perda)`) — uma transformação da cross-entropy loss para uma escala mais interpretável.
+- **Funcionalidade:** Representa o tamanho efetivo do vocabulário sobre o qual o modelo está "em dúvida" a cada posição; uma perplexity de 48.725, por exemplo, significa que o modelo está tão incerto quanto se tivesse que escolher ao acaso entre 48.725 tokens igualmente prováveis.
+- **Relação com outros conceitos:** Função direta da perda (quanto menor a perda, menor a perplexity); implementada em `perplexidade` (`src/treino.py`), usada ao lado de toda perda reportada nos experimentos deste projeto.
+- **Exemplo conceitual:** O livro calcula perplexity de `48,725.82` para um modelo não treinado com perda `10.7940`; no `exp18` (18.6) deste projeto, a perda inicial de `10.98` sobre o corpus `amostra.txt` corresponde a uma perplexity de `58.623` — na mesma ordem de grandeza do vocabulário completo (50.257), como esperado de um modelo que ainda não aprendeu nada.
+
+---
+
+### 7. Divisão Treino/Validação (Training/Validation Split)
+- **Tradução:** Divisão treino/validação
+- **Definição:** Separação do corpus de treinamento em duas partes disjuntas — uma maior (tipicamente 90%), usada para ajustar os pesos do modelo, e uma menor (10%), reservada apenas para medir o desempenho em dados que o modelo nunca viu durante o treino.
+- **Funcionalidade:** Sem essa separação, não haveria como distinguir um modelo que aprendeu um padrão geral de um modelo que apenas memorizou o texto de treino — a perda de validação é o termômetro dessa diferença.
+- **Relação com outros conceitos:** Usa os mesmos `create_dataloader_v1`/`GPTDatasetV1` da Sprint 2, um para cada metade do texto; a Sprint 5 usa `drop_last=True` no loader de treino (evita lotes incompletos durante o treino) e `drop_last=False` no de validação (quer aproveitar todos os dados disponíveis para a medida).
+- **Exemplo conceitual:** Com `train_ratio=0.90` sobre o corpus `amostra.txt` (7.180 caracteres), o `exp19` (19.1) produz 39 lotes de treino e 5 de validação, com `batch_size=2` e `context_length=32`.
+
+---
+
+### 8. calc_loss_batch / calc_loss_loader
+- **Tradução:** Cálculo da perda de um lote / de um DataLoader inteiro
+- **Definição:** Duas funções em camadas: `calc_loss_batch` calcula a cross-entropy de um único lote (chama o modelo, achata os tensores, aplica `cross_entropy`); `calc_loss_loader` itera sobre um `DataLoader` inteiro (ou só sobre os primeiros `num_batches`), acumulando e depois dividindo pelo número de lotes.
+- **Funcionalidade:** Separar as duas responsabilidades permite reutilizar `calc_loss_batch` tanto dentro do loop de treino (onde o gradiente importa) quanto dentro de `evaluate_model` (onde ele é descartado); o parâmetro `num_batches` em `calc_loss_loader` evita o custo de varrer o conjunto de validação inteiro a cada avaliação durante o treino.
+- **Relação com outros conceitos:** Implementadas como `calcular_perda_lote`/`calcular_perda_loader` (`src/treino.py`), usando exatamente a Cross-Entropy Loss definida acima.
+- **Exemplo conceitual:** Sobre `amostra.txt`, com um `GPTModel` ainda não treinado, `calcular_perda_loader` devolve `10.9789` para o conjunto de treino e `11.0167` para a validação (`exp18`, 18.6) — próximos um do outro, como esperado antes de qualquer ajuste de pesos.
+
+---
+
+### 9. Loop de Treinamento (Training Loop)
+- **Tradução:** Laço de treinamento
+- **Definição:** Sequência de oito passos (Figura 5.11) que todo treino de rede neural profunda em PyTorch segue: iterar sobre épocas, iterar sobre lotes, zerar gradientes, calcular a perda, retropropagar, atualizar os pesos e, opcionalmente, registrar perdas e gerar amostras de texto.
+- **Funcionalidade:** É o mecanismo que efetivamente transforma um `GPTModel` de pesos aleatórios em um modelo que prevê o próximo token com mais acerto — tudo o que vem antes (arquitetura, avaliação) só prepara o terreno para este loop.
+- **Relação com outros conceitos:** Implementado em `treinar_modelo` (`src/treino.py`), que corresponde ao `train_model_simple` do livro; usa `calcular_perda_lote` no passo 4 e `avaliar_modelo`/`gerar_e_imprimir_amostra` nos passos opcionais de acompanhamento.
+- **Exemplo conceitual:** O `exp19` roda esse loop por 10 épocas sobre `amostra.txt`, reduzindo a perda de treino de `10.962` para `5.264` e a de validação de `10.962` para `6.236` — a prova numérica de que o loop está, de fato, ajustando os pesos na direção certa.
+
+---
+
+### 10. Epoch (Época)
+- **Tradução:** Época
+- **Definição:** Uma passagem completa por todo o conjunto de treino — o laço externo do loop de treinamento.
+- **Funcionalidade:** É a unidade em que o progresso do treino costuma ser medido e reportado (perda por época, amostra de texto por época); o número de lotes dentro de uma época é determinado pelo tamanho do conjunto de treino dividido pelo tamanho do lote.
+- **Relação com outros conceitos:** Parâmetro `num_epocas` de `treinar_modelo`; mais épocas sobre o mesmo corpus pequeno tendem a aumentar o overfitting, como visto no `exp20`.
+- **Exemplo conceitual:** Com 39 lotes de treino por época (`exp19`), 10 épocas correspondem a 390 passos de atualização de pesos ao todo.
+
+---
+
+### 11. zero_grad() (Reinício dos Gradientes)
+- **Tradução:** Zerar os gradientes
+- **Definição:** Chamada (`otimizador.zero_grad()`) que limpa os gradientes acumulados na iteração anterior antes de calcular os novos.
+- **Funcionalidade:** Por padrão, o PyTorch ACUMULA gradientes a cada `.backward()` — útil para técnicas avançadas (acumulação de gradiente em lotes grandes), mas indesejável aqui, onde cada lote deve gerar uma atualização de peso independente. Sem `zero_grad()`, os gradientes de lotes sucessivos se somariam, distorcendo a direção da atualização.
+- **Relação com outros conceitos:** Primeiro passo de cada iteração do loop de treinamento, antes de `calcular_perda_lote` e `loss.backward()`.
+- **Exemplo conceitual:** `otimizador.zero_grad()` → `perda = calcular_perda_lote(...)` → `perda.backward()` → `otimizador.step()` é a sequência de quatro linhas que se repete a cada lote dentro de `treinar_modelo`.
+
+---
+
+### 12. optimizer.step() (Atualização dos Pesos)
+- **Tradução:** Passo do otimizador / atualização dos pesos
+- **Definição:** Chamada que efetivamente ajusta os parâmetros do modelo, na direção oposta ao gradiente calculado por `loss.backward()`, na magnitude determinada pela taxa de aprendizado.
+- **Funcionalidade:** É o passo em que o "aprendizado" realmente acontece — tudo antes dele (forward, perda, backward) só calcula EM QUE DIREÇÃO mover os pesos; `step()` os move de fato.
+- **Relação com outros conceitos:** Opera sobre todos os parâmetros registrados no otimizador (`modelo.parameters()`, passados na criação do `AdamW`); seu efeito acumulado ao longo de muitos passos é a própria curva de perda decrescente observada nos experimentos.
+- **Exemplo conceitual:** Em 390 passos (`exp19`, 10 épocas × 39 lotes), cada chamada de `otimizador.step()` move os 6.634.240 parâmetros do modelo um pouco mais na direção que reduz a perda do lote atual.
+
+---
+
+### 13. AdamW
+- **Tradução:** AdamW (mantido em inglês — nome do otimizador)
+- **Definição:** Variante do otimizador Adam que separa o *weight decay* (penalização de pesos grandes, para reduzir a complexidade do modelo e evitar overfitting) da atualização baseada no gradiente, em vez de misturar os dois como o Adam tradicional.
+- **Funcionalidade:** Essa separação produz uma regularização mais eficaz e melhor generalização — por isso é o otimizador mais usado no treinamento de LLMs atualmente, incluindo nesta implementação.
+- **Relação com outros conceitos:** Criado via `torch.optim.AdamW(modelo.parameters(), lr=..., weight_decay=...)`; é o que efetivamente executa `optimizer.step()` a cada iteração do loop de treinamento.
+- **Exemplo conceitual:** O livro treina seu modelo de 124M parâmetros com `lr=0.0004, weight_decay=0.1`; os experimentos deste projeto (`exp19`, `exp20`) usam os mesmos valores como ponto de partida, variando a taxa de aprendizado para observar seu efeito isoladamente.
+
+---
+
+### 14. Weight Decay (Decaimento de Peso)
+- **Tradução:** Decaimento de peso
+- **Definição:** Termo de regularização que penaliza pesos com magnitude grande, empurrando-os sutilmente em direção a zero a cada atualização, independentemente do gradiente da perda.
+- **Funcionalidade:** Reduz a complexidade efetiva do modelo, desencorajando-o de depender fortemente de poucos pesos muito grandes — uma forma de combater o overfitting que atua durante a própria atualização dos pesos, não sobre os dados.
+- **Relação com outros conceitos:** É o componente que o AdamW implementa de forma mais eficaz que o Adam tradicional; configurado pelo parâmetro `weight_decay` do otimizador (0.1 no exemplo do livro).
+- **Exemplo conceitual:** `torch.optim.AdamW(modelo.parameters(), lr=0.0004, weight_decay=0.1)` aplica, a cada passo, tanto a atualização baseada no gradiente da perda quanto um pequeno "encolhimento" adicional de todos os pesos.
+
+---
+
+### 15. evaluate_model (Avaliação Durante o Treino)
+- **Tradução:** Avaliação do modelo (durante o treino)
+- **Definição:** Função que calcula a perda de treino e de validação com o modelo em modo `eval()` (dropout desligado) e `torch.no_grad()` (sem cálculo de gradiente), restaurando `train()` ao final.
+- **Funcionalidade:** Sem desligar o dropout, a perda de validação oscilaria de uma medição para outra só por causa da aleatoriedade do dropout, mascarando o progresso real do treino; sem `no_grad()`, a avaliação gastaria memória e tempo calculando gradientes que não serão usados.
+- **Relação com outros conceitos:** Implementada como `avaliar_modelo` (`src/treino.py`); chamada periodicamente (a cada `freq_avaliacao` passos) de dentro do loop de treinamento, usando `calc_loss_loader` sobre um número limitado de lotes (`eval_iter`/`lotes_avaliacao`) para não pesar o treino.
+- **Exemplo conceitual:** No `exp20` (20.1), avaliar a cada época (em vez de a cada lote) permite acompanhar que a perda de validação para de cair por volta da época 8, enquanto a de treino continua caindo.
+
+---
+
+### 16. generate_and_print_sample (Acompanhamento Qualitativo)
+- **Tradução:** Geração e impressão de amostra
+- **Definição:** Função que, ao final de cada época, gera um trecho de texto a partir de um contexto inicial fixo, usando o modelo no estado atual do treino, para inspeção visual.
+- **Funcionalidade:** A perda numérica mede o progresso, mas não é intuitiva de interpretar sozinha; ver o texto evoluir de "vírgulas repetidas" para frases gramaticalmente corretas é uma confirmação qualitativa complementar, mais acessível que qualquer número.
+- **Relação com outros conceitos:** Implementada como `gerar_e_imprimir_amostra` (`src/treino.py`), que reaproveita `gerar_texto_greedy` (Sprint 4) em vez de reimplementar o laço de geração — alterna o modelo para `eval()` antes e `train()` depois, como `evaluate_model`.
+- **Exemplo conceitual:** No `exp19` (19.4), a amostra da época 1 é um trecho degenerado de espaços repetidos; na época 10, já aparece alguma estrutura reconhecível de frase — evidência visual do mesmo progresso que a perda numérica documenta.
+
+---
+
+### 17. Overfitting Durante o Treinamento (Divergência Treino/Validação)
+- **Tradução:** Sobreajuste durante o treinamento
+- **Definição:** Situação em que a perda de treino continua caindo a cada época, mas a perda de validação estagna ou passa a subir — sinal de que o modelo está memorizando particularidades do conjunto de treino em vez de aprender um padrão que generaliza.
+- **Funcionalidade:** É o principal risco ao treinar um modelo por muitas épocas sobre um corpus pequeno (como o deste projeto); o gap crescente entre as duas curvas (`perda_val - perda_treino`) é o sintoma numérico, e um trecho gerado que reaparece literalmente no corpus de treino é a confirmação qualitativa.
+- **Relação com outros conceitos:** Estende o conceito de "Overfitting" já definido no Capítulo 2 (lá, ligado ao *stride* da janela deslizante) para o contexto do treino em si: agora a causa não é a amostragem dos dados, mas o número de vezes que o modelo revisita o mesmo texto pequeno.
+- **Exemplo conceitual:** No `exp20` (20.1), o gap `perda_val - perda_treino` cresce de `-0.014` (época 1) para `+0.725` (época 8) de forma monotônica — a perda de validação deixa de acompanhar a de treino bem antes do fim do experimento, exatamente como o livro descreve para "The Verdict" (overfitting visível já a partir da época 2).
+
+---
+
+### 18. Custo de Pré-treinamento de LLMs (Cost of Pretraining)
+- **Tradução:** Custo de pré-treinamento
+- **Definição:** Estimativa do custo computacional (em horas de GPU e em dólares) de treinar um LLM em escala real, citada pelo livro para contextualizar por que este capítulo usa um modelo e um corpus tão pequenos.
+- **Funcionalidade:** Justifica a escolha didática do livro (e deste projeto): treinar um modelo de 124M parâmetros sobre um conto curto leva minutos em um laptop; treinar um modelo real em escala de produção é um projeto de centenas de milhares de dólares.
+- **Relação com outros conceitos:** Contextualiza por que a Sprint 5 usa um corpus pequeno (`amostra.txt`, 7.180 caracteres) e modelos reduzidos (`emb_dim` de 32 a 64 em vez de 768) — o objetivo é entender o MECANISMO do treino, não reproduzir sua escala real.
+- **Exemplo conceitual:** O livro estima que treinar o Llama 2 de 7 bilhões de parâmetros (184.320 horas de GPU A100, 2 trilhões de tokens) custaria cerca de US$ 690.000 em nuvem — contra os poucos minutos e nenhum custo de nuvem que os experimentos desta Sprint exigem.
+
+---
+
+### 19. Salvamento e Carregamento de Pesos (state_dict)
+- **Tradução:** Salvamento e carregamento de pesos / dicionário de estado
+- **Definição:** O `state_dict` de um modelo PyTorch é um dicionário que mapeia cada camada aos seus parâmetros; `torch.save(modelo.state_dict(), caminho)` grava esse dicionário em disco, e `modelo.load_state_dict(torch.load(caminho))` o recarrega em uma nova instância do mesmo modelo.
+- **Funcionalidade:** Permite preservar o resultado de um treino (que pode levar minutos, horas ou — em escala real — meses) sem precisar refazê-lo a cada nova sessão, e retomar o treino de onde parou ou simplesmente usar o modelo treinado para inferência depois.
+- **Relação com outros conceitos:** É o Entregável 6 desta Sprint (parte da Laura); depende da arquitetura `GPTModel` já estar definida de forma idêntica entre o salvamento e o carregamento, já que o `state_dict` só guarda os números dos pesos, não a estrutura do modelo.
+- **Exemplo conceitual:** `torch.save(modelo.state_dict(), "modelo.pth")` seguido, em uma sessão nova, de `modelo_novo = GPTModel(...); modelo_novo.load_state_dict(torch.load("modelo.pth"))` reproduz exatamente o mesmo modelo treinado, pronto para gerar texto sem precisar re-treinar.
+
+---

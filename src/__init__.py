@@ -1,5 +1,5 @@
 """
-Projeto LLM — Sprints 2 a 4.
+Projeto LLM — Sprints 2 a 5.
 
 Fluxo implementado:
 
@@ -8,6 +8,7 @@ Fluxo implementado:
           -> Self-Attention -> Causal Attention -> Multi-Head Attention (Sprint 3)
           -> N x TransformerBlock -> LayerNorm final -> logits          (Sprint 4)
           -> geração autoregressiva de texto                            (Sprint 4)
+          -> cross-entropy loss / perplexity -> loop de treinamento     (Sprint 5)
 
 Uso típico:
 
@@ -82,6 +83,15 @@ from .transformer import (
     memoria_em_mb,
     parametros_por_componente,
 )
+from .treino import (
+    avaliar_modelo,
+    calcular_perda_lote,
+    calcular_perda_loader,
+    gerar_e_imprimir_amostra,
+    perplexidade,
+    plotar_perdas,
+    treinar_modelo,
+)
 
 __all__ = [
     # tokenização e vocabulário
@@ -144,4 +154,12 @@ __all__ = [
     "GPTModel",
     "memoria_em_mb",
     "parametros_por_componente",
+    # avaliação e treinamento (Sprint 5)
+    "calcular_perda_lote",
+    "calcular_perda_loader",
+    "perplexidade",
+    "avaliar_modelo",
+    "gerar_e_imprimir_amostra",
+    "treinar_modelo",
+    "plotar_perdas",
 ]

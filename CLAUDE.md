@@ -8,9 +8,11 @@ Este é o repositório do Projeto Integrador de Inteligência Artificial e Siste
 
 Em vez de usar modelos prontos, cada conceito do livro é implementado manualmente: das leituras iniciais até a arquitetura Transformer completa, o treinamento do modelo, a geração de texto e o fine-tuning final. O projeto começou em 30/07/2026 e a entrega final é em 03/12/2026.
 
-O projeto está na **Sprint 4** (Capítulo 4: Transformer Block, arquitetura GPT completa e geração de texto — ver `Sprints.txt`), com o código já implementado. As sprints anteriores (0-1: ambiente + Capítulo 1; 2: tokenização, vocabulário, embeddings e positional embeddings; 3: mecanismos de atenção) já estão implementadas em `src/`, com código, glossário e relatório entregues. O código é **incremental**: cada sprint soma componentes aos já implementados em `src/`, formando o pipeline completo do LLM ao final do semestre.
+O projeto está na **Sprint 5** (Capítulo 5: avaliação e treinamento do modelo GPT — ver `Sprints.txt`). As sprints anteriores (0-1: ambiente + Capítulo 1; 2: tokenização, vocabulário, embeddings e positional embeddings; 3: mecanismos de atenção; 4: Transformer Block, modelo GPT e geração de texto) já estão implementadas em `src/`, com código, glossário e relatório entregues. O código é **incremental**: cada sprint soma componentes aos já implementados em `src/`, formando o pipeline completo do LLM ao final do semestre.
 
-A Sprint 4 é feita em dupla, dividida verticalmente: João (`src/transformer.py` — Transformer Block e `GPTModel`) e Laura (`src/geracao.py` — inferência e geração autorregressiva). Os dois módulos são desacoplados por design: `geracao.py` aceita qualquer chamável `(batch, tokens) -> (batch, tokens, vocab_size)` como "modelo", então as funções de geração nunca dependeram de `GPTModel` existir para serem desenvolvidas e testadas (ver `experiments/_modelos_para_geracao.py`, que troca automaticamente o modelo provisório pelo `GPTModel` real assim que ele está disponível em `src`).
+A Sprint 5 também é feita em dupla, dividida verticalmente: João (`src/treino.py` — avaliação via cross-entropy/perplexity e o loop de treinamento, Entregáveis 2 e 3, já implementado) e Laura (persistência de pesos e comparação de estratégias de geração pós-treino, Entregáveis 5 e 6, em andamento). Como na Sprint 4, as duas frentes são desacopladas: `treino.py` não sabe nada sobre salvamento de pesos nem sobre temperatura/top-k, e reaproveita `gerar_texto_greedy`/`texto_para_ids` de `src/geracao.py` (Sprint 4) só para gerar uma amostra de acompanhamento a cada época.
+
+A Sprint 4 foi feita em dupla, dividida verticalmente: João (`src/transformer.py` — Transformer Block e `GPTModel`) e Laura (`src/geracao.py` — inferência e geração autorregressiva). Os dois módulos são desacoplados por design: `geracao.py` aceita qualquer chamável `(batch, tokens) -> (batch, tokens, vocab_size)` como "modelo", então as funções de geração nunca dependeram de `GPTModel` existir para serem desenvolvidas e testadas (ver `experiments/_modelos_para_geracao.py`, que troca automaticamente o modelo provisório pelo `GPTModel` real assim que ele está disponível em `src`).
 
 ## Fluxo de trabalho (ciclo por capítulo)
 
@@ -47,6 +49,7 @@ python -m unittest tests.test_attention.TestCausalAttention.test_futuro_tem_peso
 python experiments/run_all.py            # Sprint 2 (exp01-exp06)
 python experiments/run_all_sprint3.py    # Sprint 3 (exp07-exp12)
 python experiments/run_all_sprint4.py    # Sprint 4 (exp13-exp17)
+python experiments/run_all_sprint5.py    # Sprint 5 (exp18-exp22)
 
 # rodar um experimento isolado (cada exp*.py também tem um main() executável)
 python experiments/exp07_self_attention.py
@@ -66,6 +69,7 @@ Texto
   -> attention.py                   self / causal / multi-head attention      = context vectors
   -> transformer.py                 N x TransformerBlock + LayerNorm final    = logits
   -> geracao.py                     logits -> probabilidades -> próximo token = texto gerado
+  -> treino.py                      cross-entropy/perplexity -> loop de treino = pesos ajustados
 ```
 
 ### Sprint 2 — preparação de dados e embeddings
@@ -86,13 +90,18 @@ Texto
 - **`src/geracao.py`** (Entregável 4) — ciclo de geração autorregressiva (`gerar`, `gerar_texto`, `gerar_texto_greedy`, `gerar_passo_a_passo`), independente de arquitetura: aceita qualquer chamável `(batch, tokens) -> (batch, tokens, vocab_size)` como modelo. Implementa temperatura (`aplicar_temperatura`) e top-k (`aplicar_top_k`) sobre os logits, conversão texto↔Token IDs (`texto_para_ids`/`ids_para_texto`) e métricas de análise (`entropia_da_distribuicao`, `tokens_para_cobrir`, `taxa_de_repeticao`).
 - **`experiments/_modelos_para_geracao.py`** — ponte entre os dois módulos: `obter_modelo_gpt()` tenta importar `GPTModel` de `src` e, se ainda não existir, cai para um `ModeloProvisorio` (embeddings + uma camada de atenção) ou um `ModeloBigrama` (contagem de bigramas do corpus, sem rede neural) — assim os experimentos de geração nunca ficam bloqueados pela implementação da arquitetura.
 
+### Sprint 5 — avaliação e treinamento (em andamento)
+
+- **`src/treino.py`** (Entregáveis 2 e 3, João) — `calcular_perda_lote`/`calcular_perda_loader` (seção 5.1: cross-entropy sobre um lote ou sobre um `DataLoader` inteiro) e `perplexidade` (`e^perda`, mais interpretável que a perda crua); `avaliar_modelo` alterna o modelo para `eval()` sem dropout, mede treino/validação e volta para `train()`; `treinar_modelo` é o loop central (seção 5.2: zero_grad → perda → backward → otimizador.step(), com avaliação periódica e uma amostra de texto gerada ao final de cada época via `gerar_e_imprimir_amostra`, que reaproveita `gerar_texto_greedy` da Sprint 4 em vez de reimplementar geração); `plotar_perdas` desenha a curva de perda de treino/validação por época (Figura 5.12 do livro) sem chamar `plt.show()`, devolvendo a `Figure` para o experimento salvar. Nenhuma função deste módulo imprime nada — isso fica a cargo dos scripts em `experiments/`.
+- Persistência de pesos e comparação de estratégias de geração pós-treino (Entregáveis 5 e 6, Laura) — ainda não implementado nesta sessão.
+
 ### Integração e dados
 
 - **`src/pipeline.py`** — integra as etapas da Sprint 2 (`executar_pipeline`) e resume as dimensões produzidas em cada uma (`ResultadoPipeline`), usado pelos experimentos para inspecionar o pipeline de ponta a ponta.
 - **`src/dados.py`** — carrega o corpus de treinamento, priorizando `data/the-verdict.txt` (se baixado) sobre `data/amostra.txt`.
 - Todos os tokenizadores (`SimpleTokenizerV1/V2`, `TiktokenTokenizer`, `BPETokenizerSimples`) compartilham a mesma interface (`encode`, `decode`, `n_vocab`, `nome`), o que permite trocá-los livremente em `dataset.py` e `pipeline.py`.
 
-`experiments/exp0N_*.py` espelham as seções do capítulo da sprint (um script por subtópico) e reutilizam utilidades de `experiments/_comum.py`. Sprint 2: `exp01`-`exp06` (tokenização, vocabulário/Token IDs, janela deslizante, DataLoader, embeddings, pipeline completo). Sprint 3: `exp07`-`exp12` (self-attention, scaled dot-product, causal, multi-head, visualizações das matrizes, integração com a saída da Sprint 2). Sprint 4: `exp13`-`exp15` (Transformer Block, modelo GPT completo e parâmetros, experimentos de arquitetura — n_layers/num_heads/emb_dim/dropout/contexto) e `exp16`-`exp17` (geração autorregressiva, temperatura e top-k). `run_all_sprint4.py` detecta `exp13`-`exp15` dinamicamente (por `glob`), então roda mesmo que só parte dos experimentos exista.
+`experiments/exp0N_*.py` espelham as seções do capítulo da sprint (um script por subtópico) e reutilizam utilidades de `experiments/_comum.py`. Sprint 2: `exp01`-`exp06` (tokenização, vocabulário/Token IDs, janela deslizante, DataLoader, embeddings, pipeline completo). Sprint 3: `exp07`-`exp12` (self-attention, scaled dot-product, causal, multi-head, visualizações das matrizes, integração com a saída da Sprint 2). Sprint 4: `exp13`-`exp15` (Transformer Block, modelo GPT completo e parâmetros, experimentos de arquitetura — n_layers/num_heads/emb_dim/dropout/contexto) e `exp16`-`exp17` (geração autorregressiva, temperatura e top-k). Sprint 5: `exp18` (cross-entropy/perplexity passo a passo + perda inicial do corpus), `exp19` (treino de verdade de um GPTModel pequeno sobre `data/amostra.txt`, com gráfico de perdas) e `exp20` (variação de número de épocas e de learning rate, sinais de overfitting) — `exp21`-`exp22` (persistência de pesos e geração pós-treino) ficam para a Laura. `run_all_sprint4.py`/`run_all_sprint5.py` detectam os `expNN` de cada sprint dinamicamente (por `glob`), então rodam mesmo que só parte dos experimentos exista.
 
 ## Estrutura do repositório
 
@@ -115,3 +124,4 @@ Texto
 - Código novo é organizado de forma incremental (cada sprint constrói sobre os componentes das anteriores) e sua API pública é adicionada aos imports e ao `__all__` de `src/__init__.py`, agrupada por sprint. O pipeline final integra tokenização → embeddings → atenção → Transformer → treinamento → geração → fine-tuning.
 - Módulos de atenção expõem os pesos da última passada em `ultimo_attn_weights`; experimentos de visualização dependem disso — preserve esse contrato ao mexer em `src/attention.py` ou em `TransformerBlock`/`GPTModel` (`src/transformer.py`), que o repassam.
 - `src/geracao.py` não depende de `GPTModel`: qualquer chamável `(batch, tokens) -> (batch, tokens, vocab_size)` serve como "modelo" nas funções de geração. Ao alterar a assinatura de `GPTModel.forward`, verifique `experiments/_modelos_para_geracao.py` (que importa `GPTModel` de `src` por reflexão) e `tests/test_geracao.py`.
+- Funções de `src/treino.py` nunca imprimem nem chamam `plt.show()` — devolvem valores (perdas, amostras de texto, a `Figure` de `plotar_perdas`) para que `experiments/` decida o que fazer com eles, a mesma separação já usada em `src/visualizacao.py` (Sprint 3) e em `gerar_passo_a_passo` (Sprint 4).
