@@ -9,6 +9,7 @@ Fluxo implementado:
           -> N x TransformerBlock -> LayerNorm final -> logits          (Sprint 4)
           -> geração autoregressiva de texto                            (Sprint 4)
           -> cross-entropy loss / perplexity -> loop de treinamento     (Sprint 5)
+          -> salvamento e carregamento dos pesos                       (Sprint 5)
 
 Uso típico:
 
@@ -41,6 +42,16 @@ from .attention import (
     self_attention_simples,
 )
 from .bpe import BPETokenizerSimples, TiktokenTokenizer, obter_tokenizador_bpe
+from .checkpoint import (
+    carregar_checkpoint,
+    carregar_modelo,
+    config_do_modelo,
+    mesmos_pesos,
+    restaurar_otimizador,
+    resumir_checkpoint,
+    salvar_checkpoint,
+    tamanho_do_arquivo_mb,
+)
 from .geracao import (
     aplicar_temperatura,
     aplicar_top_k,
@@ -162,4 +173,13 @@ __all__ = [
     "gerar_e_imprimir_amostra",
     "treinar_modelo",
     "plotar_perdas",
+    # salvamento e carregamento dos pesos (Sprint 5)
+    "salvar_checkpoint",
+    "carregar_checkpoint",
+    "carregar_modelo",
+    "restaurar_otimizador",
+    "config_do_modelo",
+    "resumir_checkpoint",
+    "mesmos_pesos",
+    "tamanho_do_arquivo_mb",
 ]
