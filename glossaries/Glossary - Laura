@@ -857,3 +857,343 @@ Relação com outros conceitos: Substitui a ReLU. Ao contrário dela, tem gradie
 Exemplo conceitual: GELU(x) ≈ 0.5·x·(1 + tanh[√(2/π)·(x + 0.044715·x³)]) — a aproximação encontrada por ajuste de curva, usada também no GPT-2 original.
 
 
+Glossário Cap 05 
+
+AdamW
+Termo original: AdamW optimizer
+Tradução/equivalente: Otimizador AdamW
+Definição: Variante do otimizador Adam que aplica o weight decay de forma separada da atualização adaptativa dos gradients.
+Função no modelo de linguagem: É o otimizador usado no pretraining do livro e o mais comum no treinamento de LLMs, por regularizar melhor e generalizar melhor do que o Adam original.
+Relação com outros conceitos: É um tipo de optimizer adaptativo: guarda estatísticas por parâmetro, o que faz o optimizer state ocupar memória e precisar ser salvo no checkpoint. Recebe o learning rate e o weight decay como argumentos.
+Exemplo conceitual: optimizer = torch.optim.AdamW(model.parameters(), lr=0.0004, weight_decay=0.1) — a configuração usada no treinamento de 10 epochs do capítulo.
+
+assign
+Termo original: assign
+Tradução/equivalente: Atribuição com verificação de forma
+Definição: Função utilitária que confere se dois tensores têm a mesma forma e devolve o segundo convertido em parâmetro treinável do PyTorch.
+Função no modelo de linguagem: Protege o carregamento dos pesos da OpenAI: qualquer incompatibilidade de dimensão entre o GPTModel e os pesos baixados é acusada na hora, em vez de produzir um modelo silenciosamente quebrado.
+Relação com outros conceitos: É a peça elementar de load_weights_into_gpt, chamada uma vez para cada tensor copiado. Devolve um nn.Parameter, o mesmo tipo usado no Cap. 3 para declarar pesos.
+Exemplo conceitual: assign(gpt.tok_emb.weight, params["wte"]) passa, porque os dois têm forma (50257, 768). Já com context_length de 256, a cópia de params["wpe"], de forma (1024, 768), falharia com "Shape mismatch" — por isso a configuração volta a 1.024.
+
+calc_loss_loader
+Termo original: calc_loss_loader / calc_loss_batch
+Tradução/equivalente: Cálculo do loss por data loader / por batch
+Definição: Par de funções: calc_loss_batch calcula o cross entropy de um único batch; calc_loss_loader percorre os batches de um data loader e devolve o loss médio.
+Função no modelo de linguagem: São o instrumento de medição do treinamento. Produzem os números de training loss e validation loss acompanhados ao longo das epochs.
+Relação com outros conceitos: Usam cross_entropy e flatten internamente e movem os dados para o device. O argumento num_batches limita a avaliação a uma parte dos dados, o que evaluate_model usa via eval_iter.
+Exemplo conceitual: Com o modelo ainda não treinado, calc_loss_loader devolve 10,988 para o conjunto de treino e 10,981 para o de validação.
+
+Checkpoint
+Termo original: Checkpoint
+Tradução/equivalente: Ponto de salvamento
+Definição: Arquivo que reúne o necessário para retomar o treinamento de onde parou — no mínimo, o state_dict do modelo e o do otimizador.
+Função no modelo de linguagem: Torna o pretraining interrompível. Sem checkpoint, cada nova sessão exigiria treinar o modelo do zero, o que é caro mesmo em escala pequena.
+Relação com outros conceitos: Combina state_dict e optimizer state em um único dicionário salvo com torch.save. Distingue-se do arquivo só de pesos, que basta para inferência mas não para continuar treinando.
+Exemplo conceitual: Nos experimentos da Sprint 5 (exp21), o arquivo só com pesos ocupou 37,69 MB e o checkpoint com o estado do AdamW, 113,06 MB — três vezes mais.
+
+Cross entropy loss
+Termo original: Cross entropy loss
+Tradução/equivalente: Perda de entropia cruzada
+Definição: Medida da diferença entre duas distribuições de probabilidade: a dos tokens corretos e a prevista pelo modelo. Para tokens discretos, equivale à média negativa do log probability dos tokens-alvo.
+Função no modelo de linguagem: É a loss function do pretraining. Minimizá-la é o mesmo que aumentar a probabilidade que o modelo atribui ao próximo token correto em cada posição.
+Relação com outros conceitos: É calculada a partir dos logits por torch.nn.functional.cross_entropy, que aplica softmax, log e média de uma vez. Sua exponencial é a perplexity.
+Exemplo conceitual: No exemplo do livro, os seis passos manuais e a chamada cross_entropy(logits_flat, targets_flat) dão o mesmo valor: 10,7940.
+
+Decoding strategies
+Termo original: Decoding strategies / text generation strategies
+Tradução/equivalente: Estratégias de decodificação
+Definição: Regras que definem como o próximo token é escolhido a partir das probabilidades produzidas pelo modelo.
+Função no modelo de linguagem: Controlam o equilíbrio entre previsibilidade e variedade do texto gerado, e reduzem a tendência de o modelo repetir trechos memorizados do treino.
+Relação com outros conceitos: Incluem o greedy decoding (Cap. 4), o probabilistic sampling, o temperature scaling e o top-k sampling, combinados na função generate.
+Exemplo conceitual: Com o mesmo modelo treinado, o greedy decoding devolve um trecho literal do conto, enquanto top_k=25 com temperatura 1,4 produz uma frase nova.
+
+device
+Termo original: device / .to(device)
+Tradução/equivalente: Dispositivo de execução
+Definição: Objeto do PyTorch que indica onde os tensores e o modelo ficam e são processados: CPU ou GPU (cuda).
+Função no modelo de linguagem: Permite que o mesmo código treine na GPU quando houver uma disponível e na CPU caso contrário, sem nenhuma outra alteração.
+Relação com outros conceitos: Modelo e dados precisam estar no mesmo device. Por isso calc_loss_batch move cada batch com .to(device), e torch.load usa map_location para carregar os pesos no device certo.
+Exemplo conceitual: device = torch.device("cuda" if torch.cuda.is_available() else "cpu"); model.to(device)
+
+download_and_load_gpt2
+Termo original: download_and_load_gpt2
+Tradução/equivalente: Download e carregamento do GPT-2
+Definição: Função do módulo gpt_download.py, fornecido no repositório do livro, que baixa os arquivos de um modelo GPT-2 da OpenAI e os devolve como dois dicionários, settings e params.
+Função no modelo de linguagem: É a porta de entrada para os pesos pré-treinados: evita escrever o código de download e de leitura do formato TensorFlow em que a OpenAI salvou os pesos.
+Relação com outros conceitos: Seu resultado é consumido por load_weights_into_gpt. Exige TensorFlow e tqdm instalados.
+Exemplo conceitual: download_and_load_gpt2(model_size="124M", models_dir="gpt2") baixa sete arquivos; o de pesos, model.ckpt.data-00000-of-00001, tem 498 MB.
+
+eos_id
+Termo original: eos_id (end-of-sequence ID)
+Tradução/equivalente: ID do token de fim de sequência
+Definição: Argumento opcional da função generate que informa o token ID que marca o fim de uma sequência.
+Função no modelo de linguagem: Permite encerrar a geração antes de atingir max_new_tokens, assim que o modelo indicar que o texto terminou.
+Relação com outros conceitos: Relaciona-se ao token especial <|endoftext|> do Cap. 2, cujo ID no tokenizer do GPT-2 é 50256.
+Exemplo conceitual: generate(..., eos_id=50256) interrompe o laço no momento em que o token sorteado for <|endoftext|>.
+
+Epoch
+Termo original: Epoch
+Tradução/equivalente: Época
+Definição: Uma passada completa por todo o conjunto de treino.
+Função no modelo de linguagem: É a unidade de duração do treinamento. O número de epochs define quantas vezes o modelo vê cada exemplo, e com isso o risco de memorização.
+Relação com outros conceitos: O training loop itera primeiro pelas epochs e, dentro de cada uma, pelos batches. Em LLMs reais é comum treinar por uma única epoch sobre um corpus muito grande.
+Exemplo conceitual: Com 9 batches de treino, cada epoch tem 9 atualizações de pesos; 10 epochs somam cerca de 90 passos.
+
+evaluate_model
+Termo original: evaluate_model (eval_freq, eval_iter)
+Tradução/equivalente: Avaliação do modelo durante o treino
+Definição: Função que calcula o training loss e o validation loss com o modelo em modo de avaliação e sem rastrear gradients, e depois o devolve ao modo de treino.
+Função no modelo de linguagem: Gera os pontos da curva de aprendizado. Desligar o dropout durante a avaliação torna os números estáveis e reproduzíveis.
+Relação com outros conceitos: Usa .eval(), torch.no_grad(), calc_loss_loader e model.train(). eval_freq define de quantos em quantos passos ela é chamada; eval_iter, quantos batches ela usa.
+Exemplo conceitual: Com eval_freq=5 e eval_iter=5, o loop imprime uma linha como "Ep 1 (Step 000005): Train loss 8.111, Val loss 8.339" a cada cinco passos.
+
+Fine-tuning
+Termo original: Fine-tuning
+Tradução/equivalente: Ajuste fino
+Definição: Treinamento adicional de um modelo já pré-treinado, com dados específicos de uma tarefa.
+Função no modelo de linguagem: É o estágio 3 do plano do livro. Aproveita o conhecimento geral adquirido no pretraining e o especializa — em classificação no Cap. 6 e em seguimento de instruções no Cap. 7.
+Relação com outros conceitos: Opõe-se ao pretraining: este usa dados não rotulados em grande volume, o fine-tuning usa dados rotulados em volume menor. Parte de pretrained weights.
+Exemplo conceitual: Os pesos da OpenAI carregados no fim do capítulo são o ponto de partida para transformar o GPT-2 em um classificador de spam no Cap. 6.
+
+flatten()
+Termo original: flatten()
+Tradução/equivalente: Achatar tensor
+Definição: Método que combina dimensões consecutivas de um tensor em uma só.
+Função no modelo de linguagem: Adapta as formas para a função cross_entropy do PyTorch, que espera uma lista de previsões e uma lista de alvos, sem a dimensão de batch separada.
+Relação com outros conceitos: É aplicado aos logits e aos targets dentro de calc_loss_batch, antes do cálculo do cross entropy loss.
+Exemplo conceitual: logits.flatten(0, 1) leva de [2, 3, 50257] a [6, 50257]; targets.flatten() leva de [2, 3] a [6].
+
+Foundation model
+Termo original: Foundation model
+Tradução/equivalente: Modelo de base
+Definição: Modelo resultante do pretraining, com capacidade geral de linguagem mas ainda sem especialização em nenhuma tarefa.
+Função no modelo de linguagem: É o produto do estágio 2 do plano do livro e a base sobre a qual se constroem os modelos especializados.
+Relação com outros conceitos: É obtido por pretraining e serve de entrada para o fine-tuning. Os pesos do GPT-2 publicados pela OpenAI são um foundation model.
+Exemplo conceitual: No diagrama do capítulo, o foundation model se ramifica em dois destinos: um classificador e um assistente pessoal, cada um com seu fine-tuning.
+
+generate
+Termo original: generate
+Tradução/equivalente: Função de geração com amostragem
+Definição: Versão ampliada de generate_text_simple que aceita temperature, top_k e eos_id para controlar como o próximo token é escolhido.
+Função no modelo de linguagem: É a função de geração usada a partir deste capítulo. Permite produzir texto mais variado e menos preso a trechos memorizados.
+Relação com outros conceitos: Combina top-k sampling, temperature scaling e torch.multinomial. Com temperature=0.0 e top_k=None, volta a ser greedy decoding, equivalente a generate_text_simple.
+Exemplo conceitual: generate(model, idx, max_new_tokens=15, context_size=256, top_k=25, temperature=1.4) produz "Every effort moves you stand to work on surprise, a one of us had gone with random-".
+
+GPT-2 model sizes
+Termo original: GPT-2 model sizes (model_configs)
+Tradução/equivalente: Tamanhos do modelo GPT-2
+Definição: As quatro versões do GPT-2 publicadas pela OpenAI, que compartilham a mesma arquitetura e diferem no embedding size, no número de transformer blocks e no número de attention heads.
+Função no modelo de linguagem: Permitem trocar o tamanho do modelo apenas atualizando a configuração, sem mudar uma linha das classes.
+Relação com outros conceitos: São registradas no dicionário model_configs e aplicadas sobre o GPT_CONFIG_124M do Cap. 4. Todas usam context_length de 1.024.
+Exemplo conceitual: 124M: 768 / 12 / 12 · 355M: 1.024 / 24 / 16 · 774M: 1.280 / 36 / 20 · 1.558M: 1.600 / 48 / 25 (emb_dim / n_layers / n_heads).
+
+Learning rate
+Termo original: Learning rate (lr)
+Tradução/equivalente: Taxa de aprendizado
+Definição: Fator que define o tamanho do passo dado na direção indicada pelos gradients a cada atualização de pesos.
+Função no modelo de linguagem: É o hiperparâmetro que mais influencia a estabilidade do treinamento: alto demais faz o loss oscilar ou divergir, baixo demais torna o aprendizado lento.
+Relação com outros conceitos: É passado ao optimizer. Técnicas como learning rate warmup e cosine annealing, deixadas para o apêndice D, variam esse valor ao longo do treinamento.
+Exemplo conceitual: lr=0.0004 no treinamento do capítulo. Nos experimentos da Sprint 5 (exp20), lr de 1e-2 e 1e-3 deram validation loss parecido, mas o primeiro dobrou a distância entre treino e validação.
+
+load_weights_into_gpt
+Termo original: load_weights_into_gpt
+Tradução/equivalente: Carregamento dos pesos no GPTModel
+Definição: Função que copia cada tensor do dicionário params da OpenAI para a camada correspondente do GPTModel.
+Função no modelo de linguagem: Faz a ponte entre duas convenções de nomes diferentes e transforma um modelo de pesos aleatórios no GPT-2 pré-treinado.
+Relação com outros conceitos: Usa assign em cada cópia e np.split para separar as matrizes de query, key e value, que a OpenAI guardou juntas. Implementa o weight tying ao copiar wte também para out_head.
+Exemplo conceitual: params["blocks"][0]["attn"]["c_proj"]["w"] corresponde, no GPTModel, a gpt.trf_blocks[0].att.out_proj.weight — e precisa ser transposto.
+
+Log probability
+Termo original: Log probability
+Tradução/equivalente: Probabilidade logarítmica
+Definição: Logaritmo natural de uma probabilidade. Como as probabilidades estão entre 0 e 1, os log probabilities são sempre negativos ou zero.
+Função no modelo de linguagem: Torna a otimização numericamente mais estável: transforma produtos de probabilidades minúsculas em somas, e evita valores tão pequenos que o computador não consegue representar.
+Relação com outros conceitos: É o passo intermediário entre a softmax e o cross entropy loss. A média dos log probabilities, com o sinal invertido, é o loss.
+Exemplo conceitual: torch.log aplicado às probabilidades dos tokens-alvo dá valores como -9,5042, -10,3796 e -11,3677; a média dos seis é -10,7940.
+
+Memorization
+Termo original: Memorization
+Tradução/equivalente: Memorização
+Definição: Situação em que o modelo reproduz literalmente trechos do texto de treino em vez de gerar texto novo.
+Função no modelo de linguagem: É o sintoma concreto do overfitting em LLMs. Indica que o modelo decorou os dados em vez de aprender padrões gerais da linguagem.
+Relação com outros conceitos: Aparece quando o training loss continua caindo e o validation loss estaciona. É mitigada por datasets maiores, menos epochs e decoding strategies com amostragem.
+Exemplo conceitual: O modelo treinado gera "quite insensible to the irony", frase que pode ser encontrada palavra por palavra no arquivo do conto "The Verdict".
+
+model.train()
+Termo original: model.train()
+Tradução/equivalente: Modo de treinamento
+Definição: Método que coloca o modelo em modo de treinamento, reativando componentes como o dropout.
+Função no modelo de linguagem: Garante que o dropout esteja ligado durante as atualizações de pesos. Precisa ser chamado de novo depois de cada avaliação, que coloca o modelo em modo .eval().
+Relação com outros conceitos: É o par de .eval() (Cap. 4). evaluate_model e generate_and_print_sample alternam entre os dois a cada chamada.
+Exemplo conceitual: Dentro de train_model_simple, model.train() é chamado no início de cada epoch, e evaluate_model o chama de novo antes de devolver os losses.
+
+Negative average log probability
+Termo original: Negative average log probability
+Tradução/equivalente: Média negativa da probabilidade logarítmica
+Definição: A média dos log probabilities dos tokens-alvo, multiplicada por -1.
+Função no modelo de linguagem: Inverte o sinal para que o treinamento possa minimizar um valor positivo em vez de maximizar um negativo — a convenção usual em deep learning.
+Relação com outros conceitos: É, na prática, o próprio cross entropy loss, e os dois termos costumam ser usados como sinônimos. O objetivo é levá-lo até 0, que corresponde a probabilidade 1 no token correto.
+Exemplo conceitual: avg_log_probas = -10,7940; neg_avg_log_probas = avg_log_probas * -1 = 10,7940.
+
+Optimizer
+Termo original: Optimizer
+Tradução/equivalente: Otimizador
+Definição: Objeto que recebe os parâmetros do modelo e aplica a regra de atualização dos pesos a partir dos gradients calculados.
+Função no modelo de linguagem: Executa o aprendizado propriamente dito: é ele que efetivamente altera os pesos a cada passo do training loop.
+Relação com outros conceitos: Recebe model.parameters(), o learning rate e o weight decay. É operado por optimizer.zero_grad() e optimizer.step(). O livro usa o AdamW.
+Exemplo conceitual: optimizer = torch.optim.AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
+
+Optimizer state
+Termo original: Optimizer state (optimizer.state_dict())
+Tradução/equivalente: Estado do otimizador
+Definição: Informações internas que um otimizador adaptativo guarda para cada parâmetro, como médias móveis dos gradients.
+Função no modelo de linguagem: Precisa ser salvo para retomar o treinamento corretamente. Sem ele, o otimizador recomeça do zero e o modelo pode aprender mal ou nem convergir.
+Relação com outros conceitos: É obtido com optimizer.state_dict() e restaurado com load_state_dict. Compõe o checkpoint junto com o state_dict do modelo.
+Exemplo conceitual: No exp21 da Sprint 5, o estado do AdamW fez o checkpoint ocupar 113,06 MB, contra 37,69 MB do arquivo só com pesos: o otimizador guarda dois valores extras por parâmetro.
+
+optimizer.step()
+Termo original: optimizer.step()
+Tradução/equivalente: Passo do otimizador
+Definição: Método que atualiza todos os pesos do modelo usando os gradients calculados pelo backward pass.
+Função no modelo de linguagem: É o momento em que o modelo efetivamente aprende. Sem ele, os gradients seriam calculados e descartados sem efeito.
+Relação com outros conceitos: Vem sempre depois de loss.backward(), que calcula os gradients, e antes do próximo optimizer.zero_grad().
+Exemplo conceitual: zero_grad() → calc_loss_batch() → loss.backward() → optimizer.step() — a sequência que se repete a cada batch.
+
+optimizer.zero_grad()
+Termo original: optimizer.zero_grad()
+Tradução/equivalente: Zerar gradientes
+Definição: Método que apaga os gradients acumulados nos parâmetros do modelo.
+Função no modelo de linguagem: Impede que os gradients de um batch se somem aos do batch seguinte, já que o PyTorch acumula gradients por padrão.
+Relação com outros conceitos: É o primeiro passo de cada iteração do training loop, antes do cálculo do loss e de loss.backward().
+Exemplo conceitual: Sem zero_grad(), o segundo batch atualizaria os pesos usando a soma dos gradients dos dois primeiros batches, e o erro cresceria a cada passo.
+
+Perplexity
+Termo original: Perplexity
+Tradução/equivalente: Perplexidade
+Definição: Exponencial do cross entropy loss. Indica, de forma mais intuitiva, quantas opções equiprováveis o modelo considera a cada token.
+Função no modelo de linguagem: É uma métrica de avaliação mais legível que o loss bruto: pode ser lida como o tamanho efetivo do vocabulário sobre o qual o modelo está incerto.
+Relação com outros conceitos: Deriva diretamente do cross entropy loss. Como o loss, quanto menor, melhor. Um modelo que chutasse ao acaso teria perplexity igual a vocab_size.
+Exemplo conceitual: torch.exp(10,7940) = 48.725,8 no exemplo do livro. No exp18 da Sprint 5, o modelo inicial teve perplexity de 64.655 — acima dos 50.257 de um chute uniforme.
+
+Pretrained weights
+Termo original: Pretrained weights
+Tradução/equivalente: Pesos pré-treinados
+Definição: Parâmetros de um modelo já treinado em um grande corpus, disponibilizados para serem carregados em outra implementação.
+Função no modelo de linguagem: Dispensam o custo do pretraining. Carregados no GPTModel, transformam um modelo que gera texto incoerente em um capaz de produzir frases com sentido.
+Relação com outros conceitos: São obtidos por download_and_load_gpt2 e copiados por load_weights_into_gpt. São o ponto de partida do fine-tuning.
+Exemplo conceitual: Com os pesos da OpenAI, o modelo gera "Every effort moves you toward finding an ideal new way to practice something!".
+
+Pretraining
+Termo original: Pretraining
+Tradução/equivalente: Pré-treinamento
+Definição: Treinamento inicial de um LLM em um grande volume de texto não rotulado, ajustando os pesos para prever o próximo token.
+Função no modelo de linguagem: É o que dá ao modelo sua capacidade geral de linguagem. Concentra a maior parte do custo computacional de um LLM.
+Relação com outros conceitos: Usa unlabeled data, cross entropy loss e um optimizer como o AdamW, dentro de um training loop. Produz um foundation model.
+Exemplo conceitual: O pretraining do Llama 2 de 7 bilhões de parameters consumiu 184.320 horas de GPU A100, com custo estimado em cerca de US$ 690.000.
+
+Probabilistic sampling
+Termo original: Probabilistic sampling (torch.multinomial)
+Tradução/equivalente: Amostragem probabilística
+Definição: Escolha do próximo token por sorteio, com chance proporcional à probabilidade de cada token.
+Função no modelo de linguagem: Introduz variedade no texto gerado: o token mais provável continua sendo o escolhido com mais frequência, mas não sempre.
+Relação com outros conceitos: Substitui o argmax do greedy decoding. É implementada por torch.multinomial e combinada com temperature scaling e top-k sampling.
+Exemplo conceitual: Em 1.000 sorteios sobre o vocabulário de exemplo, "forward" sai 582 vezes, "toward" 343, "closer" 73 e "inches" 2.
+
+settings e params
+Termo original: settings and params
+Tradução/equivalente: Configuração e parâmetros
+Definição: Os dois dicionários devolvidos por download_and_load_gpt2: settings guarda a configuração da arquitetura e params guarda os tensores de pesos.
+Função no modelo de linguagem: Separam o que define a forma do modelo do que ele aprendeu. O primeiro orienta a construção do GPTModel; o segundo preenche seus pesos.
+Relação com outros conceitos: settings corresponde ao GPT_CONFIG_124M do Cap. 4, com outros nomes. params é consumido por load_weights_into_gpt.
+Exemplo conceitual: settings = {"n_vocab": 50257, "n_ctx": 1024, "n_embd": 768, "n_head": 12, "n_layer": 12}; params tem as chaves blocks, b, g, wpe e wte.
+
+state_dict
+Termo original: state_dict
+Tradução/equivalente: Dicionário de estado
+Definição: Dicionário que associa cada camada do modelo aos seus tensores de parâmetros.
+Função no modelo de linguagem: É a forma recomendada de salvar e carregar um modelo no PyTorch: guarda só os valores aprendidos, não o código da classe.
+Relação com outros conceitos: É salvo com torch.save e restaurado com load_state_dict. Os buffers registrados com register_buffer (Cap. 3) também entram nele.
+Exemplo conceitual: torch.save(model.state_dict(), "model.pth"); depois, model.load_state_dict(torch.load("model.pth", map_location=device)).
+
+Temperature scaling
+Termo original: Temperature scaling
+Tradução/equivalente: Escalonamento por temperatura
+Definição: Divisão dos logits por um número positivo, a temperatura, antes da softmax.
+Função no modelo de linguagem: Controla o grau de aleatoriedade da geração: temperaturas abaixo de 1 concentram a escolha no token favorito, acima de 1 espalham a probabilidade entre mais opções.
+Relação com outros conceitos: Atua sobre os logits e é aplicada antes do probabilistic sampling. Temperatura 1 equivale a não escalar; temperatura próxima de 0 se aproxima do argmax.
+Exemplo conceitual: Com temperatura 0,1, "forward" é escolhido quase 100% das vezes; com 5, a frase "every effort moves you pizza" passa a sair em cerca de 4% dos casos.
+
+text_to_token_ids / token_ids_to_text
+Termo original: text_to_token_ids / token_ids_to_text
+Tradução/equivalente: Conversão entre texto e token IDs
+Definição: Par de funções utilitárias que convertem texto em um tensor de token IDs com batch dimension, e o caminho inverso.
+Função no modelo de linguagem: Encapsulam as duas pontas da geração de texto, deixando o resto do código trabalhar só com tensores.
+Relação com outros conceitos: Usam o tokenizer tiktoken do Cap. 2. A primeira acrescenta a batch dimension com unsqueeze(0); a segunda a remove com squeeze(0).
+Exemplo conceitual: text_to_token_ids("Every effort moves you", tokenizer) devolve tensor([[6109, 3626, 6100, 345]]).
+
+Top-k sampling
+Termo original: Top-k sampling
+Tradução/equivalente: Amostragem top-k
+Definição: Restrição do sorteio aos k tokens mais prováveis: os logits de todos os demais são trocados por menos infinito antes da softmax.
+Função no modelo de linguagem: Mantém a variedade da amostragem mas corta as escolhas absurdas, que estão na cauda de baixa probabilidade.
+Relação com outros conceitos: Usa torch.topk e torch.where, e o mesmo truque de menos infinito da máscara causal do Cap. 3. É combinado com temperature scaling na função generate.
+Exemplo conceitual: Com k=3, sobram "forward" (0,5775), "toward" (0,3610) e "closer" (0,0615). No exp22 da Sprint 5, com temperatura 1,5, top-k 20 reduziu a perplexity de 8.267,9 para 95,7.
+
+torch.save / torch.load
+Termo original: torch.save / torch.load
+Tradução/equivalente: Salvar / carregar no PyTorch
+Definição: Funções que gravam objetos Python e tensores em disco e os leem de volta.
+Função no modelo de linguagem: Permitem guardar o modelo treinado e retomá-lo em outra sessão sem repetir o pretraining.
+Relação com outros conceitos: São usadas com state_dict para salvar pesos e com um dicionário para salvar o checkpoint completo. map_location define em que device os tensores são carregados.
+Exemplo conceitual: torch.save({"model_state_dict": model.state_dict(), "optimizer_state_dict": optimizer.state_dict()}, "model_and_optimizer.pth")
+
+train_model_simple
+Termo original: train_model_simple
+Tradução/equivalente: Função de treinamento simples
+Definição: Função que implementa o training loop completo do capítulo, devolvendo os históricos de loss e o número de tokens vistos.
+Função no modelo de linguagem: É a rotina que efetivamente faz o pretraining do GPTModel neste livro.
+Relação com outros conceitos: Usa calc_loss_batch, evaluate_model, generate_and_print_sample e o optimizer. Recebe num_epochs, eval_freq, eval_iter e o contexto inicial das amostras.
+Exemplo conceitual: train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs=10, eval_freq=5, eval_iter=5, start_context="Every effort moves you", tokenizer=tokenizer) — cerca de 5 minutos em um MacBook Air.
+
+Training loop
+Termo original: Training loop
+Tradução/equivalente: Laço de treinamento
+Definição: Procedimento repetitivo que percorre as epochs e os batches, calculando o loss, os gradients e atualizando os pesos a cada passo.
+Função no modelo de linguagem: É o motor do pretraining. A cada iteração, o modelo fica um pouco melhor em prever o próximo token.
+Relação com outros conceitos: Encadeia optimizer.zero_grad(), calc_loss_batch, loss.backward() e optimizer.step(); opcionalmente, evaluate_model e geração de amostras. É implementado em train_model_simple.
+Exemplo conceitual: Os oito passos do livro: iterar epochs, iterar batches, zerar gradients, calcular loss, backward, atualizar pesos, imprimir losses e gerar texto de amostra.
+
+Training loss / validation loss
+Termo original: Training loss and validation loss
+Tradução/equivalente: Perda de treino e de validação
+Definição: O loss calculado sobre o conjunto de treino e o calculado sobre o conjunto de validação, que o modelo não usa para aprender.
+Função no modelo de linguagem: Juntos, medem o aprendizado e detectam overfitting: o de treino mostra o quanto o modelo se ajusta aos dados, o de validação mostra o quanto ele generaliza.
+Relação com outros conceitos: São calculados por calc_loss_loader dentro de evaluate_model. Quando o de treino segue caindo e o de validação estaciona, há memorization.
+Exemplo conceitual: No treinamento de 10 epochs: treino de 9,781 para 0,391, validação de 9,933 para 6,452. Os dois se separam a partir da segunda epoch.
+
+Training set / validation set
+Termo original: Training set and validation set
+Tradução/equivalente: Conjunto de treino e de validação
+Definição: As duas partes em que o dataset é dividido: uma usada para ajustar os pesos, outra reservada para avaliar o modelo em texto que ele não viu.
+Função no modelo de linguagem: Sem o conjunto de validação não há como saber se o modelo está aprendendo padrões gerais ou apenas decorando o texto de treino.
+Relação com outros conceitos: A proporção é definida por train_ratio. Cada parte vira um data loader com create_dataloader_v1 (Cap. 2); o de treino embaralha os dados, o de validação não.
+Exemplo conceitual: Com train_ratio = 0,90, os 5.145 tokens de "The Verdict" rendem 9 batches de treino e apenas 1 de validação, todos de forma [2, 256].
+
+Unlabeled data
+Termo original: Unlabeled data
+Tradução/equivalente: Dados não rotulados
+Definição: Texto bruto, sem anotações humanas de categoria, resposta ou rótulo.
+Função no modelo de linguagem: É o insumo do pretraining. Basta o próprio texto, porque o alvo de cada posição é simplesmente o token seguinte — o rótulo vem dos dados.
+Relação com outros conceitos: Opõe-se aos dados rotulados usados no fine-tuning do Cap. 6, em que cada exemplo tem uma classe atribuída.
+Exemplo conceitual: O conto "The Verdict", com 20.479 caracteres, é usado sem nenhuma anotação: os targets são as próprias entradas deslocadas uma posição.
+
+Weight decay
+Termo original: Weight decay
+Tradução/equivalente: Decaimento de pesos
+Definição: Técnica de regularização que penaliza pesos grandes, empurrando-os levemente para zero a cada atualização.
+Função no modelo de linguagem: Reduz a complexidade efetiva do modelo e ajuda a combater o overfitting.
+Relação com outros conceitos: É passado como argumento ao optimizer. O AdamW se diferencia do Adam justamente pela forma como aplica o weight decay.
+Exemplo conceitual: weight_decay=0.1 no AdamW usado para treinar o GPTModel no capítulo.
+
+
+
